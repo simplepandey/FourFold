@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  phoneNumber String   @unique
+  name        String?
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([phoneNumber])
+  @@map("users")
+}
+
+model Otp {
+  id          String   @id @default(uuid())
+  phoneNumber String
+  otpCode     String
+  expiresAt   DateTime
+  isUsed      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([phoneNumber])
+  @@index([phoneNumber, isUsed])
+  @@map("otps")
+}
+
+model Society {
+  id           String   @id @default(uuid())
+  phoneNumber  String   @unique
+  name         String
+  societyName  String
+  blockOrWing  String
+  totalMembers Int
+  password     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([phoneNumber])
+  @@map("societies")
+}
+
+model ModuleMaster {
+  id           String    @id @default(uuid())
+  serialNumber String    @unique
+  createdBy    String
+  createDate   DateTime  @default(now())
+  updatedBy    String?
+  updateDate   DateTime  @updatedAt
+  isDeleted    Boolean   @default(false)
+
+  @@index([serialNumber])
+  @@index([isDeleted])
+  @@map("module_master")
+}
+
+model ModuleRegistration {
+  id                 String    @id @default(uuid())
+  moduleSerialNumber String
+  registeredTo       String
+  noOfPump           Int
+  phase              String
+  hpOfPump           Float
+  createdBy          String
+  createDate         DateTime  @default(now())
+  updatedBy          String?
+  updateDate         DateTime  @updatedAt
+  isDeleted          Boolean   @default(false)
+
+  @@index([moduleSerialNumber])
+  @@index([isDeleted])
+  @@map("module_registration")
+}
