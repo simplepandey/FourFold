@@ -122,6 +122,7 @@ model EspRegistration {
   id             String   @id @default(uuid())
   serialNumber   String
   serialHash     String
+  type           String?
   username       String?
   userId         String?
   societyId      String?

@@ -9,6 +9,7 @@ export class DeviceRepository {
   async create(data: {
     serialNumber: string;
     serialHash: string;
+    type?: string;
     username?: string;
     userId?: string;
     societyId?: string;

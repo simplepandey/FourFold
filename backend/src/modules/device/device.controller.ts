@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, HttpStatus, UseGuards, Res } from '@nestjs/common';
+import { Controller, Post, Get, Param, Query, HttpStatus, UseGuards, Res } from '@nestjs/common';
 import { Response } from 'express';
 import {
   ApiTags,
@@ -6,6 +6,7 @@ import {
   ApiCreatedResponse,
   ApiOkResponse,
   ApiParam,
+  ApiQuery,
   ApiBasicAuth,
 } from '@nestjs/swagger';
 import { DeviceService } from './device.service';
@@ -27,6 +28,12 @@ export class DeviceController {
       'Called by the ESP device on first boot. Returns 201 on first registration, 200 if already registered. Payload is identical in both cases.',
   })
   @ApiParam({ name: 'serialNo', example: 'SR12345', description: 'ESP device serial number' })
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    example: 'esp32',
+    description: 'Device/hardware type reported by the device',
+  })
   @ApiCreatedResponse({
     description: '201 created (new) or 200 OK (already registered) — same payload',
     schema: {
@@ -37,6 +44,7 @@ export class DeviceController {
           id: 'uuid',
           serialNumber: 'SR12345',
           serialHash: 'a1b2c3d4e5f6',
+          type: 'esp32',
           username: null,
           userId: null,
           societyId: null,
@@ -51,8 +59,12 @@ export class DeviceController {
       },
     },
   })
-  async register(@Param('serialNo') serialNo: string, @Res() res: Response) {
-    const { data, created } = await this.service.register(serialNo);
+  async register(
+    @Param('serialNo') serialNo: string,
+    @Query('type') type: string,
+    @Res() res: Response,
+  ) {
+    const { data, created } = await this.service.register(serialNo, type);
     const status = created ? HttpStatus.CREATED : HttpStatus.OK;
     res.status(status).json({ success: true, message: 'Device registered successfully', data });
   }

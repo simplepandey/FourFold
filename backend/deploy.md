@@ -1,6 +1,6 @@
 # Deploy Backend to a Vultr Compute Instance
 ## Complete Step-by-Step — Every Command Listed
-### For FourFold NestJS API (aquacontrol-api-1)
+### For FourFold NestJS API (fourfold-api-1)
 
 Ties together the other two Vultr pieces already set up:
 - MQTT broker → `vultr-emqx-complete-guide.md` (repo root)
@@ -11,10 +11,10 @@ Ties together the other two Vultr pieces already set up:
 ## What You Will Have at the End
 
 ```
-Vultr Mumbai VPS — aquacontrol-api-1 ($6/month)
+Vultr Mumbai VPS — fourfold-api-1 ($6/month)
   └── Nginx (80/443, Let's Encrypt TLS)
         └── fourfold-api container (127.0.0.1:3000, not public)
-              ├── connects to → Postgres on aquacontrol-db-1 (or Managed DB)
+              ├── connects to → Postgres on fourfold-api-1 (or Managed DB)
               └── connects to → EMQX broker on aquacontrol-mqtt-1
 
 Public URL:  https://dev-api.aquacontrol.in  (already hardcoded in
@@ -34,7 +34,7 @@ Public URL:  https://dev-api.aquacontrol.in  (already hardcoded in
 4. Image: Ubuntu 22.04 LTS x64
 5. Plan: VC2-1C-2GB ($6/month) — bump to VC2-2C-4GB if you see memory pressure under load
 6. SSH Key: reuse "my-laptop" from your other VPSs
-7. Hostname: aquacontrol-api-1
+7. Hostname: fourfold-api-1
 8. Click "Deploy Now"
 ```
 
@@ -85,7 +85,7 @@ Notice **3000 is not opened publicly** — the app listens on `localhost:3000` o
 
 ## Step 6 — Allow This Server to Reach Your Database
 
-On the **database VPS** (`aquacontrol-db-1`, from `steps.txt`), add this server's IP:
+On the **database VPS** (`fourfold-api-1`, from `steps.txt`), add this server's IP:
 
 ```bash
 ssh root@YOUR_DB_SERVER_IP
@@ -107,7 +107,7 @@ This is the "YOUR_BACKEND_IP" placeholder from `steps.txt` Step 11 — now you h
 If the repo is private, add a deploy key first: generate one on the server, add its public half to GitHub (repo → Settings → Deploy keys → read-only is enough).
 
 ```bash
-ssh-keygen -t ed25519 -C "aquacontrol-api-1" -f ~/.ssh/id_ed25519 -N ""
+ssh-keygen -t ed25519 -C "fourfold-api-1" -f ~/.ssh/id_ed25519 -N ""
 cat ~/.ssh/id_ed25519.pub
 ```
 Paste that into GitHub → your repo → Settings → Deploy keys → "Add deploy key" (read-only).
@@ -140,7 +140,7 @@ nano .env
 NODE_ENV=production
 PORT=3000
 
-# Points at aquacontrol-db-1 from steps.txt — swap for the Vultr Managed
+# Points at fourfold-api-1 from steps.txt — swap for the Vultr Managed
 # Database connection string instead if you went that route (dbserver.md)
 DATABASE_URL=postgresql://fourfold_app:YOUR_DB_PASSWORD@YOUR_DB_SERVER_IP:5432/fourfold_db
 

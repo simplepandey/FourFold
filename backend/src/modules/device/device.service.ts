@@ -10,7 +10,7 @@ export class DeviceService {
     private readonly topicCache: EspTopicCacheService,
   ) {}
 
-  async register(serialNumber: string): Promise<{ data: object; created: boolean }> {
+  async register(serialNumber: string, type?: string): Promise<{ data: object; created: boolean }> {
     const existing = await this.repository.findOneBySerialNumber(serialNumber);
     if (existing) {
       this.topicCache.set(existing.serialNumber, {
@@ -28,6 +28,7 @@ export class DeviceService {
     const registration = await this.repository.create({
       serialNumber,
       serialHash,
+      type,
       commandTopic: `${base}/commands`,
       telemetryTopic: `${base}/telemetry`,
       alertTopic: `${base}/alert`,
@@ -48,6 +49,7 @@ export class DeviceService {
     id: string;
     serialNumber: string;
     serialHash: string;
+    type: string | null;
     username: string | null;
     userId: string | null;
     societyId: string | null;
@@ -61,6 +63,7 @@ export class DeviceService {
       id: r.id,
       serialNumber: r.serialNumber,
       serialHash: r.serialHash,
+      type: r.type,
       username: r.username,
       userId: r.userId,
       societyId: r.societyId,
