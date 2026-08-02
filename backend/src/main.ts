@@ -54,8 +54,8 @@ async function bootstrap() {
   const reflector = app.get(Reflector);
   app.useGlobalGuards(new JwtAuthGuard(reflector));
 
-  // Swagger (disabled in production)
-  if (nodeEnv !== 'production') {
+  // Swagger
+  {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('FourFold API')
       .setDescription(

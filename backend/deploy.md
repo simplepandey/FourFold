@@ -17,7 +17,7 @@ Vultr Mumbai VPS — fourfold-api-1 ($6/month)
               ├── connects to → Postgres on fourfold-api-1 (or Managed DB)
               └── connects to → EMQX broker on aquacontrol-mqtt-1
 
-Public URL:  https://dev-api.aquacontrol.in  (already hardcoded in
+Public URL:  https://api.fourfoldsystem.com  (already hardcoded in
              the Flutter app's AppConfig._DevConfig.baseUrl)
 ```
 
@@ -237,7 +237,7 @@ DATABASE_URL="postgresql://fourfold_app:YOUR_DB_PASSWORD@YOUR_DB_SERVER_IP:5432/
 
 # PART 7 — HTTPS VIA NGINX + LET'S ENCRYPT
 
-Your Flutter app's `AppConfig` already expects `https://dev-api.aquacontrol.in` and `https://api.aquacontrol.in` — point one of those at this server.
+Your Flutter app's `AppConfig` already expects `https://api.fourfoldsystem.com` and `https://api.aquacontrol.in` — point one of those at this server.
 
 ## Step 14 — DNS
 
@@ -246,12 +246,12 @@ Add an A record:
   Name:  dev-api  (or api, for prod)
   Value: YOUR_API_SERVER_IP
 
-Full domain: dev-api.aquacontrol.in → YOUR_API_SERVER_IP
+Full domain: api.fourfoldsystem.com → YOUR_API_SERVER_IP
 ```
 
 Wait for propagation, verify:
 ```bash
-nslookup dev-api.aquacontrol.in
+nslookup api.fourfoldsystem.com
 ```
 
 ## Step 15 — Install Nginx + Certbot
@@ -269,7 +269,7 @@ nano /etc/nginx/sites-available/fourfold-api
 ```nginx
 server {
     listen 80;
-    server_name dev-api.aquacontrol.in;
+    server_name api.fourfoldsystem.com;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -293,7 +293,7 @@ systemctl reload nginx
 ## Step 17 — Get the Certificate
 
 ```bash
-certbot --nginx -d dev-api.aquacontrol.in
+certbot --nginx -d api.fourfoldsystem.com
 ```
 ```
 Enter email address: your@email.com
@@ -306,10 +306,10 @@ Certbot edits the Nginx config automatically to add the `listen 443 ssl` block a
 ## Step 18 — Verify
 
 ```bash
-curl https://dev-api.aquacontrol.in/api/docs
+curl https://api.fourfoldsystem.com/api/docs
 ```
 
-Or just open `https://dev-api.aquacontrol.in/api/docs` in a browser — should show Swagger UI over HTTPS.
+Or just open `https://api.fourfoldsystem.com/api/docs` in a browser — should show Swagger UI over HTTPS.
 
 Auto-renewal is set up by certbot's own systemd timer; confirm it:
 ```bash
@@ -320,7 +320,7 @@ certbot renew --dry-run
 
 # PART 8 — CONNECT THE FLUTTER APP
 
-Your `_DevConfig.baseUrl` in `app_config.dart` should already be `https://dev-api.aquacontrol.in/api/v1` — no code change needed, just run:
+Your `_DevConfig.baseUrl` in `app_config.dart` should already be `https://api.fourfoldsystem.com/api/v1` — no code change needed, just run:
 
 ```bash
 flutter run --dart-define=APP_ENV=dev
