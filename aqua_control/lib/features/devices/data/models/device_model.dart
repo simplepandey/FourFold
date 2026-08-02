@@ -1,45 +1,48 @@
 import 'package:equatable/equatable.dart';
 
-enum DeviceStatus { online, offline, fault }
-
 class DeviceModel extends Equatable {
-  final String id;
-  final String name;
+  final String espId;
   final String serialNumber;
-  final DeviceStatus status;
-  final String firmwareVersion;
-  final String? latestFirmwareVersion;
+  final String societyCode;
+  final String role;
+  final String serialHash;
+  final String address;
 
   const DeviceModel({
-    required this.id,
-    required this.name,
+    required this.espId,
     required this.serialNumber,
-    required this.status,
-    required this.firmwareVersion,
-    this.latestFirmwareVersion,
+    required this.societyCode,
+    required this.role,
+    required this.serialHash,
+    this.address = '',
   });
 
-  bool get hasUpdate =>
-      latestFirmwareVersion != null && latestFirmwareVersion != firmwareVersion;
+  bool get isAdmin => role == 'admin';
 
-  static List<DeviceModel> get mockList => const [
-        DeviceModel(
-          id: 'PAD_dc9854f924f0',
-          name: 'Main Pump Controller',
-          serialNumber: 'PAD_dc9854f924f0',
-          status: DeviceStatus.online,
-          firmwareVersion: 'v2.3.1',
-          latestFirmwareVersion: 'v2.4.0',
-        ),
-        DeviceModel(
-          id: 'PAD_a1b2c3d4e5f6',
-          name: 'Backup Pump',
-          serialNumber: 'PAD_a1b2c3d4e5f6',
-          status: DeviceStatus.offline,
-          firmwareVersion: 'v2.1.0',
-        ),
-      ];
+  String get displaySubtitle {
+    final addr = address.trim();
+    if (addr.isNotEmpty) {
+      return addr.length > 15 ? '${addr.substring(0, 15)}…' : addr;
+    }
+    return societyCode;
+  }
+
+  factory DeviceModel.fromJson(Map<String, dynamic> json) {
+    final esp    = (json['esp']    as Map<String, dynamic>?) ?? {};
+    final module = (json['module'] as Map<String, dynamic>?) ?? {};
+    final addr   = (json['address'] as String?)
+        ?? (module['address'] as String?)
+        ?? '';
+    return DeviceModel(
+      espId:        (esp['id']            as String?) ?? '',
+      serialNumber: (json['serialNumber'] as String?) ?? '',
+      societyCode:  (json['societyCode']  as String?) ?? '',
+      role:         (json['role']         as String?) ?? 'member',
+      serialHash:   (esp['serialHash']    as String?) ?? '',
+      address:      addr,
+    );
+  }
 
   @override
-  List<Object?> get props => [id, status];
+  List<Object?> get props => [espId, serialNumber];
 }

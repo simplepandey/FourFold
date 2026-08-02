@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/repositories/auth_repository.dart';
 import 'auth_event.dart';
@@ -7,6 +8,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final AuthRepository _repo;
 
   AuthBloc(this._repo) : super(const AuthInitial()) {
+    // App startup
+    on<AppStarted>(_onAppStarted);
     // Login
     on<LoginWithPassword>(_onLoginWithPassword);
     on<SendLoginOtp>(_onSendLoginOtp);
@@ -17,6 +20,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<CompleteRegistration>(_onCompleteRegistration);
     // Shared
     on<LogoutRequested>(_onLogout);
+  }
+
+  // ─── App startup ────────────────────────────────────────────
+
+  Future<void> _onAppStarted(
+    AppStarted event,
+    Emitter<AuthState> emit,
+  ) async {
+    final user = await _repo.tryRestoreSession();
+    if (user != null) {
+      emit(AuthAuthenticated(user));
+    } else {
+      emit(const AuthUnauthenticated());
+    }
   }
 
   // ─── Login ──────────────────────────────────────────────────
@@ -127,6 +144,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(const AuthUnauthenticated());
   }
 
-  String _message(Object e) =>
-      e is Exception ? e.toString().replaceAll('Exception: ', '') : e.toString();
+  String _message(Object e) {
+    if (e is DioException) return e.message ?? 'Something went wrong';
+    if (e is Exception) return e.toString().replaceAll('Exception: ', '');
+    return e.toString();
+  }
 }

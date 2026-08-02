@@ -48,7 +48,7 @@ export class ModuleRegistrationController {
         message: 'Module registered successfully',
         data: {
           id: 'uuid',
-          moduleSerialNumber: 'SN-2024-001',
+          serialNumber: 'SN-2024-001',
           registeredTo: 'user-id',
           noOfPump: 3,
           phase: 'Single Phase',
@@ -118,7 +118,11 @@ export class ModuleRegistrationController {
     description: 'Sets isDeleted = true. The module becomes available for re-registration.',
   })
   @ApiParam({ name: 'id', description: 'Registration UUID' })
-  @ApiQuery({ name: 'deletedBy', required: true, description: 'ID or name of the user deleting this record' })
+  @ApiQuery({
+    name: 'deletedBy',
+    required: true,
+    description: 'ID or name of the user deleting this record',
+  })
   @ApiOkResponse({ description: 'Registration deleted successfully' })
   @ApiNotFoundResponse({ description: 'Registration not found' })
   async remove(@Param('id') id: string, @Query('deletedBy') deletedBy: string) {

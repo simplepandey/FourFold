@@ -1,0 +1,288 @@
+PART 1 — CREATE VULTR ACCOUNT AND SERVER
+Step 1 — Deploy a New Server
+
+1. Go to https://my.vultr.com
+2. Click "+ Deploy" (top right)
+3. Select "Cloud Compute — Shared CPU"
+Choose Location:
+
+Click: Mumbai
+Choose Image:
+
+Click: Ubuntu
+Select: 22.04 LTS x64
+Choose Plan:
+
+Click "Regular Cloud Compute" tab
+
+Select:
+  VC2-1C-2GB
+  1 vCPU, 2GB RAM, 55GB SSD, 2TB bandwidth
+  $6/month
+
+Postgres for a small-to-medium app is fine on this. Bump to
+VC2-2C-4GB later if you see memory pressure.
+SSH Key:
+Reuse the key you already added for the EMQX VPS (my-laptop) if you have one, or generate a new one:
+
+
+# On your laptop, only if you don't already have one
+ssh-keygen -t rsa -b 4096 -C "aquacontrol@youremail.com"
+cat ~/.ssh/id_rsa.pub
+Back in Vultr: "+ Add SSH Key" → paste → Name it → Add.
+
+Server Hostname:
+
+Hostname: aquacontrol-db-1
+Click "Deploy Now". Wait ~60 seconds for status "Running".
+
+Step 2 — Note Your Server IP
+
+Servers list → copy the IP, e.g. 139.84.xxx.xxx
+We'll call it YOUR_DB_SERVER_IP below.
+PART 2 — FIRST LOGIN AND SYSTEM SETUP
+Step 3 — SSH In
+
+ssh root@YOUR_DB_SERVER_IP
+Type yes on the fingerprint prompt.
+
+Step 4 — Update System
+
+apt update && apt upgrade -y
+Step 5 — Install Essential Tools
+
+apt install -y curl wget nano ufw
+Step 6 — Set Timezone
+
+timedatectl set-timezone Asia/Kolkata
+PART 3 — INSTALL DOCKER
+Step 7 — Install Docker Engine + Compose Plugin
+
+curl -fsSL https://get.docker.com | sh
+Wait for it to finish (1-2 minutes).
+
+Step 8 — Verify
+
+docker --version
+docker compose version
+Expected:
+
+
+Docker version 27.x.x
+Docker Compose version v2.x.x
+Step 9 — Enable Docker on Boot
+
+systemctl enable docker
+PART 4 — FIREWALL — LOCK DOWN POSTGRES
+Postgres on the open internet with just a password is a bad idea. Restrict port 5432 to only the IPs that legitimately need it (your backend server, your laptop).
+
+Step 10 — Base Firewall Rules
+
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp
+Step 11 — Allow Postgres Only From Trusted IPs
+Replace YOUR_BACKEND_IP and YOUR_LAPTOP_IP with real IPs (curl ifconfig.me on each machine to find them):
+
+
+ufw allow from YOUR_BACKEND_IP to any port 5432 proto tcp
+ufw allow from YOUR_LAPTOP_IP to any port 5432 proto tcp
+If your laptop's IP changes often (home ISP, no static IP), you'll need to re-run this each time you want to connect directly from your laptop. Alternative: skip laptop access here and use ssh port-forwarding instead (Step 20).
+
+Step 12 — Enable Firewall
+
+ufw enable
+Type y when warned about disrupting SSH.
+
+Step 13 — Verify
+
+ufw status
+Expected:
+
+
+Status: active
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW       Anywhere
+5432/tcp                   ALLOW       YOUR_BACKEND_IP
+5432/tcp                   ALLOW       YOUR_LAPTOP_IP
+PART 5 — RUN POSTGRES
+Step 14 — Create a Project Directory
+
+mkdir -p /opt/fourfold-db
+cd /opt/fourfold-db
+Step 15 — Generate a Strong Password
+
+openssl rand -base64 24
+Copy the output — this is your POSTGRES_PASSWORD.
+
+Step 16 — Create .env
+
+nano .env
+Paste (replace the password with what you generated):
+
+
+POSTGRES_USER=fourfold_app
+POSTGRES_PASSWORD=PASTE_GENERATED_PASSWORD_HERE
+POSTGRES_DB=fourfold_db
+Save: Ctrl+X → Y → Enter.
+
+Step 17 — Create docker-compose.yml
+
+nano docker-compose.yml
+Paste — this is a slimmed-down version of your project's own backend/docker-compose.yml, just the postgres service, standalone on this VPS:
+
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: fourfold-postgres
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    env_file:
+      - .env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+restart: unless-stopped is the key line — it survives VPS reboots without any systemd unit needed.
+
+Save: Ctrl+X → Y → Enter.
+
+Step 18 — Start It
+
+docker compose up -d
+Expected:
+
+
+[+] Running 2/2
+ ✔ Volume "fourfold-db_postgres-data"  Created
+ ✔ Container fourfold-postgres         Started
+Step 19 — Verify It's Healthy
+
+docker compose ps
+Expected: STATUS column shows Up ... (healthy).
+
+Check logs if not:
+
+
+docker compose logs postgres
+PART 6 — CONNECT
+Step 20 — Test From Your Laptop
+If your laptop's IP is in the firewall allowlist (Step 11):
+
+
+psql "postgresql://fourfold_app:YOUR_PASSWORD@YOUR_DB_SERVER_IP:5432/fourfold_db" -c "\conninfo"
+If not allowlisted (or IP changes often), tunnel over SSH instead — no firewall change needed since it rides on port 22:
+
+
+ssh -L 5433:localhost:5432 root@YOUR_DB_SERVER_IP
+# in a second terminal:
+psql "postgresql://fourfold_app:YOUR_PASSWORD@localhost:5433/fourfold_db" -c "\conninfo"
+Step 21 — Point the Backend At It
+Wherever NestJS runs, update backend/.env:
+
+
+DATABASE_URL=postgresql://fourfold_app:YOUR_PASSWORD@YOUR_DB_SERVER_IP:5432/fourfold_db
+(No ?sslmode=require needed here — this container doesn't have TLS configured, unlike Vultr Managed Database. Fine for a locked-down firewall setup; see Step 24 if you want TLS too.)
+
+Step 22 — Push the Schema
+
+cd backend
+npx prisma db push
+npx prisma generate
+Expected: 🚀 Your database is now in sync with your Prisma schema.
+
+Step 23 — Confirm From the Backend
+
+npm run start:dev
+
+[PrismaService] Database connected successfully
+PART 7 — (OPTIONAL) ADD TLS
+If your backend connects over the public internet (not a private VPC), consider encrypting the connection. Reuse the same Let's Encrypt approach as your EMQX guide, but for Postgres:
+
+Step 24 — Get a Cert (needs a domain pointed at YOUR_DB_SERVER_IP)
+
+apt install certbot -y
+certbot certonly --standalone -d db.yourdomain.com
+Step 25 — Mount Certs Into the Container
+
+mkdir -p /opt/fourfold-db/certs
+cp /etc/letsencrypt/live/db.yourdomain.com/fullchain.pem /opt/fourfold-db/certs/server.crt
+cp /etc/letsencrypt/live/db.yourdomain.com/privkey.pem /opt/fourfold-db/certs/server.key
+chmod 600 /opt/fourfold-db/certs/server.key
+chown 999:999 /opt/fourfold-db/certs/server.key   # postgres user inside the alpine image
+Add to docker-compose.yml under the postgres service:
+
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./certs:/var/lib/postgresql/certs:ro
+    command: >
+      postgres
+      -c ssl=on
+      -c ssl_cert_file=/var/lib/postgresql/certs/server.crt
+      -c ssl_key_file=/var/lib/postgresql/certs/server.key
+
+docker compose up -d
+Then use ?sslmode=require in DATABASE_URL.
+
+PART 8 — BACKUPS
+Step 26 — Manual Dump
+
+docker exec fourfold-postgres pg_dump -U fourfold_app fourfold_db > /opt/fourfold-db/backup-$(date +%F).sql
+Step 27 — Automate With Cron
+
+crontab -e
+Add (daily at 2 AM, keeps backups in /opt/fourfold-db/backups/):
+
+
+0 2 * * * mkdir -p /opt/fourfold-db/backups && docker exec fourfold-postgres pg_dump -U fourfold_app fourfold_db > /opt/fourfold-db/backups/backup-$(date +\%F).sql && find /opt/fourfold-db/backups -mtime +7 -delete
+This keeps 7 days of backups and deletes older ones automatically. For anything you actually care about long-term, copy these off-server too (e.g. rsync to another machine, or upload to Vultr Object Storage / S3).
+
+Step 28 — Restore From a Backup (if needed)
+
+cat /opt/fourfold-db/backups/backup-2026-08-01.sql | docker exec -i fourfold-postgres psql -U fourfold_app fourfold_db
+USEFUL COMMANDS REFERENCE
+
+docker compose ps                          # status
+docker compose logs -f postgres            # live logs
+docker compose restart postgres            # restart
+docker compose down                        # stop (keeps volume/data)
+docker exec -it fourfold-postgres psql -U fourfold_app fourfold_db   # shell into DB
+df -h                                       # disk usage
+free -h                                     # RAM usage
+ufw status                                  # firewall rules
+COMMON ERRORS AND FIXES
+
+ERROR: connection refused from backend
+FIX:   Backend's IP isn't in the ufw allowlist (Step 11).
+       Re-check: ufw status
+
+ERROR: password authentication failed
+FIX:   .env POSTGRES_PASSWORD doesn't match what's in DATABASE_URL,
+       or you edited .env after the container already initialized
+       the volume — password changes in .env only apply on first
+       container creation. To force it: docker compose down -v
+       (⚠ this deletes all data) then docker compose up -d again.
+
+ERROR: docker compose ps shows "unhealthy"
+FIX:   docker compose logs postgres — usually a bad POSTGRES_USER/
+       POSTGRES_PASSWORD/POSTGRES_DB combo, or disk full (df -h).
+
+ERROR: container doesn't survive reboot
+FIX:   Confirm `restart: unless-stopped` is in docker-compose.yml
+       and that docker itself is enabled: systemctl enable docker
+
+ERROR: "FATAL: no pg_hba.conf entry" after adding TLS
+FIX:   Client needs sslmode=require in the connection string once
+       ssl=on is set on the server.
+This VPS is now dedicated purely to Postgres — same pattern as your EMQX broker VPS, each concern on its own box. Let me know if you also want the full backend/docker-compose.yml (API + Postgres + pgAdmin together) deployed to a single VPS instead — that's a shorter guide since Docker/firewall setup is identical, just a different compose file at the end.

@@ -1,11 +1,17 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:sendotp_flutter_sdk/sendotp_flutter_sdk.dart';
 import '../../../../core/config/app_config.dart';
 import '../models/user_model.dart';
 
 class AuthRepository {
   final _storage = const FlutterSecureStorage();
   late final Dio _dio;
+
+  // Stored between sendOtp and verifyOtp SDK calls
+  String? _reqId;
 
   AuthRepository() {
     _dio = Dio(BaseOptions(
@@ -33,39 +39,40 @@ class AuthRepository {
   }
 
   // ─── Login: password ─────────────────────────────────────
-  // POST /auth/society-login  { phoneNumber, password }
-  // response: { data: { society: {...}, token } }
-
   Future<UserModel> loginWithPassword({
     required String mobile,
     required String password,
   }) async {
     if (AppConfig.useMock) {
       await Future.delayed(const Duration(seconds: 1));
+      await _saveSession('mock_jwt_${_mockUser.id}', _mockUser);
       return _mockUser;
     }
-    final res = await _dio.post(AppConfig.societyLogin, data: {
+    final res = await _dio.post(AppConfig.userLogin, data: {
       'phoneNumber': _toE164(mobile),
       'password': password,
     });
     final data = res.data['data'] as Map<String, dynamic>;
-    await _storage.write(key: 'auth_token', value: data['token'] as String);
-    return UserModel.fromSocietyJson(data['society'] as Map<String, dynamic>);
+    final user = UserModel.fromSocietyJson(data['society'] as Map<String, dynamic>);
+    await _saveSession(data['token'] as String, user);
+    return user;
   }
 
-  // ─── Login: OTP ───────────────────────────────────────────
-  // POST /auth/send-otp  { phoneNumber }
-
+  // ─── Login: OTP via MSG91 widget SDK ────────────────────
   Future<void> sendLoginOtp(String mobile) async {
     if (AppConfig.useMock) {
       await Future.delayed(const Duration(milliseconds: 800));
       return;
     }
-    await _dio.post(AppConfig.sendOtp, data: {'phoneNumber': _toE164(mobile)});
+    final response = await OTPWidget.sendOTP({'identifier': _toMsg91(mobile)});
+    final map = response as Map<dynamic, dynamic>;
+    debugPrint('[MSG91 sendOTP] full response: $map');
+    if (map['type'] != 'success') {
+      throw Exception(map['message']?.toString() ?? 'Failed to send OTP');
+    }
+    _reqId = map['message']?.toString();
+    debugPrint('[MSG91 sendOTP] reqId stored: $_reqId');
   }
-
-  // POST /auth/verify-otp  { phoneNumber, otp }
-  // response: { data: { user: {...}, token } }
 
   Future<UserModel> verifyLoginOtp({
     required String mobile,
@@ -73,26 +80,32 @@ class AuthRepository {
   }) async {
     if (AppConfig.useMock) {
       await Future.delayed(const Duration(seconds: 1));
+      await _saveSession('mock_jwt_${_mockUser.id}', _mockUser);
       return _mockUser;
     }
-    final res = await _dio.post(AppConfig.verifyOtp, data: {
+    final accessToken = await _verifyWithSdk(otp);
+    final res = await _dio.post(AppConfig.verifyOtpToken, data: {
+      'accessToken': accessToken,
       'phoneNumber': _toE164(mobile),
-      'otp': otp,
     });
     final data = res.data['data'] as Map<String, dynamic>;
-    await _storage.write(key: 'auth_token', value: data['token'] as String);
-    return UserModel.fromUserJson(data['user'] as Map<String, dynamic>);
+    final user = UserModel.fromUserJson(data['user'] as Map<String, dynamic>);
+    await _saveSession(data['token'] as String, user);
+    return user;
   }
 
-  // ─── Registration: OTP ────────────────────────────────────
-  // Reuses the same send-otp / verify-otp endpoints
-
+  // ─── Registration: OTP via MSG91 widget SDK ──────────────
   Future<void> sendRegistrationOtp(String mobile) async {
     if (AppConfig.useMock) {
       await Future.delayed(const Duration(milliseconds: 800));
       return;
     }
-    await _dio.post(AppConfig.sendOtp, data: {'phoneNumber': _toE164(mobile)});
+    final response = await OTPWidget.sendOTP({'identifier': _toMsg91(mobile)});
+    final map = response as Map<dynamic, dynamic>;
+    if (map['type'] != 'success') {
+      throw Exception(map['message']?.toString() ?? 'Failed to send OTP');
+    }
+    _reqId = map['message']?.toString();
   }
 
   Future<void> verifyRegistrationOtp({
@@ -101,21 +114,18 @@ class AuthRepository {
   }) async {
     if (AppConfig.useMock) {
       await Future.delayed(const Duration(seconds: 1));
-      if (otp != AppConfig.mockOtp) throw Exception('Invalid OTP');
       return;
     }
-    // verify-otp returns a JWT — save it so the subsequent POST /societies call
-    // is authenticated (the endpoint requires Bearer token)
-    final res = await _dio.post(AppConfig.verifyOtp, data: {
+    final accessToken = await _verifyWithSdk(otp);
+    final res = await _dio.post(AppConfig.verifyOtpToken, data: {
+      'accessToken': accessToken,
       'phoneNumber': _toE164(mobile),
-      'otp': otp,
     });
     final data = res.data['data'] as Map<String, dynamic>;
     await _storage.write(key: 'auth_token', value: data['token'] as String);
   }
 
-  // POST /societies  { phoneNumber, name, societyName, blockOrWing, totalMembers, password }
-  // Requires JWT saved during verifyRegistrationOtp
+  // POST /societies
   Future<UserModel> completeRegistration({
     required String mobile,
     required String name,
@@ -127,61 +137,104 @@ class AuthRepository {
     if (AppConfig.useMock) {
       await Future.delayed(const Duration(seconds: 1));
       final user = UserModel(
-        id: 'usr_${DateTime.now().millisecondsSinceEpoch}',
-        name: name,
-        mobile: _toE164(mobile),
-        role: 'admin',
+        id:          'usr_${DateTime.now().millisecondsSinceEpoch}',
+        name:        name,
+        mobile:      _toE164(mobile),
+        role:        'admin',
         societyName: societyName,
-        block: block,
+        block:       block,
+        societyId:   'soc_${DateTime.now().millisecondsSinceEpoch}',
+        societyCode: 'SOC-MOCK01',
       );
-      await _storage.write(key: 'auth_token', value: 'mock_jwt_${user.id}');
+      await _saveSession('mock_jwt_${user.id}', user);
       return user;
     }
     final res = await _dio.post(AppConfig.createSociety, data: {
-      'phoneNumber': _toE164(mobile),
-      'name': name,
-      'societyName': societyName,
-      'blockOrWing': block,        // backend field name
+      'phoneNumber':  _toE164(mobile),
+      'name':         name,
+      'societyName':  societyName,
+      'blockOrWing':  block,
       'totalMembers': totalMembers,
-      'password': password,
+      'password':     password,
     });
     final data = res.data['data'] as Map<String, dynamic>;
-    // Society create response has no token — token was already saved in verifyRegistrationOtp
-    return UserModel(
+    final user = UserModel(
       id:          data['id'] as String,
-      name:        (data['name'] as String?) ?? name,
+      name:        (data['name']        as String?) ?? name,
       mobile:      _toE164(mobile),
       role:        'admin',
       societyName: (data['societyName'] as String?) ?? societyName,
       block:       (data['blockOrWing'] as String?) ?? block,
+      societyId:   data['id'] as String,
+      societyCode: (data['societyCode'] as String?) ?? '',
     );
+    await _storage.write(key: 'auth_user', value: jsonEncode(user.toJson()));
+    return user;
   }
 
-  // ─── Shared ───────────────────────────────────────────────
+  // ─── Session ─────────────────────────────────────────────
+
+  Future<UserModel?> tryRestoreSession() async {
+    try {
+      final token    = await _storage.read(key: 'auth_token');
+      final userJson = await _storage.read(key: 'auth_user');
+      if (token == null || userJson == null) return null;
+      return UserModel.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<String?> getToken() => _storage.read(key: 'auth_token');
 
-  Future<void> logout() => _storage.delete(key: 'auth_token');
+  Future<void> logout() async {
+    await _storage.delete(key: 'auth_token');
+    await _storage.delete(key: 'auth_user');
+  }
 
   // ─── Helpers ─────────────────────────────────────────────
 
-  // Converts 10-digit Indian number to E.164.
-  // Already formatted numbers are returned as-is.
+  Future<String> _verifyWithSdk(String otp) async {
+    debugPrint('[MSG91 verifyOTP] reqId=$_reqId  otp=$otp');
+    if (_reqId == null) throw Exception('Session expired. Please request a new OTP.');
+    final response = await OTPWidget.verifyOTP({'reqId': _reqId, 'otp': otp});
+    final map = response as Map<dynamic, dynamic>;
+    debugPrint('[MSG91 verifyOTP] full response: $map');
+    if (map['type'] != 'success') {
+      throw Exception(map['message']?.toString() ?? 'Invalid OTP. Please try again.');
+    }
+    final token = map['message']?.toString();
+    if (token == null || token.isEmpty) throw Exception('Verification failed. Please try again.');
+    _reqId = null;
+    return token;
+  }
+
+  Future<void> _saveSession(String token, UserModel user) async {
+    await _storage.write(key: 'auth_token', value: token);
+    await _storage.write(key: 'auth_user',  value: jsonEncode(user.toJson()));
+  }
+
+  /// E.164 format: +919876543210
   static String _toE164(String mobile) {
     final digits = mobile.replaceAll(RegExp(r'\D'), '');
     if (digits.length == 10) return '+91$digits';
     if (digits.length == 12 && digits.startsWith('91')) return '+$digits';
-    return mobile; // already E.164 or unknown format
+    return mobile;
   }
+
+  /// MSG91 identifier format (no + prefix): 919876543210
+  static String _toMsg91(String mobile) => _toE164(mobile).replaceFirst('+', '');
 
   // ─── Mock data ────────────────────────────────────────────
 
   static const _mockUser = UserModel(
-    id: 'usr_mock_001',
-    name: 'Navin Bind',
-    mobile: AppConfig.mockPhone,
-    role: 'admin',
+    id:          'usr_mock_001',
+    name:        'Navin Bind',
+    mobile:      AppConfig.mockPhone,
+    role:        'admin',
     societyName: 'Green Valley Society',
-    block: 'Block 4',
+    block:       'Block 4',
+    societyId:   'soc_mock_001',
+    societyCode: 'SOC-MOCK01',
   );
 }

@@ -71,6 +71,11 @@ class CompleteRegistration extends AuthEvent {
 
 // ─── Shared ───────────────────────────────────────────────────
 
+/// Dispatched once at app startup to restore a saved session.
+class AppStarted extends AuthEvent {
+  const AppStarted();
+}
+
 class LogoutRequested extends AuthEvent {
   const LogoutRequested();
 }

@@ -5,15 +5,19 @@ import '../../../../core/widgets/water_level_indicator.dart';
 import '../../data/models/pump_status_model.dart';
 import '../bloc/home_bloc.dart';
 import '../bloc/home_event.dart';
+import 'threshold_settings_sheet.dart';
 
 class PumpControlCard extends StatelessWidget {
   final PumpStatusModel status;
-  const PumpControlCard({super.key, required this.status});
+  final bool commandPending;
+  const PumpControlCard(
+      {super.key, required this.status, this.commandPending = false});
 
   @override
   Widget build(BuildContext context) {
     final c = context.appColors;
     final isOn = status.motorStatus == MotorStatus.on;
+    final isOff = status.motorStatus == MotorStatus.off;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -28,11 +32,18 @@ class PumpControlCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 10, height: 10,
-                decoration: BoxDecoration(color: isOn ? c.green : c.textMuted, shape: BoxShape.circle),
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                    color: isOn ? c.green : c.textMuted,
+                    shape: BoxShape.circle),
               ),
               const SizedBox(width: 8),
-              Text(status.pumpName, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: c.textPrimary)),
+              Text(status.pumpName,
+                  style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: c.textPrimary)),
               const Spacer(),
               _ModeChip(mode: status.mode),
             ],
@@ -40,22 +51,38 @@ class PumpControlCard extends StatelessWidget {
           const SizedBox(height: 24),
           Row(
             children: [
-              WaterLevelIndicator(percent: status.overheadPercent, label: 'OVERHEAD'),
+              WaterLevelIndicator(
+                  percent: status.overheadPercent, label: 'OVERHEAD'),
               Expanded(
-                child: Column(children: [Icon(Icons.settings, color: c.primary, size: 36)]),
+                child: Column(children: [
+                  GestureDetector(
+                    onTap: () => ThresholdSettingsSheet.show(
+                      context,
+                      overcurrent: status.overcurrent,
+                      undercurrent: status.undercurrent,
+                      onSave: (oc, uc) => context.read<HomeBloc>().add(
+                          SetThresholds(overcurrent: oc, undercurrent: uc)),
+                    ),
+                    child: Icon(Icons.settings, color: c.primary, size: 36),
+                  ),
+                ]),
               ),
-              WaterLevelIndicator(percent: status.undergroundPercent, label: 'UNDERGROUND'),
+              WaterLevelIndicator(
+                  percent: status.undergroundPercent, label: 'UNDERGROUND'),
             ],
           ),
           const SizedBox(height: 20),
           Container(
-            decoration: BoxDecoration(color: c.surfaceElevated, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+                color: c.surfaceElevated,
+                borderRadius: BorderRadius.circular(12)),
             child: Row(
               children: MotorMode.values.map((m) {
                 final selected = status.mode == m;
                 return Expanded(
                   child: GestureDetector(
-                    onTap: () => context.read<HomeBloc>().add(ChangeMotorMode(m)),
+                    onTap: () =>
+                        context.read<HomeBloc>().add(ChangeMotorMode(m)),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -68,7 +95,10 @@ class PumpControlCard extends StatelessWidget {
                       child: Text(
                         _modeLabel(m),
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: selected ? c.primary : c.textMuted),
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: selected ? c.primary : c.textMuted),
                       ),
                     ),
                   ),
@@ -79,9 +109,25 @@ class PumpControlCard extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _ControlButton(label: '✅  Motor ON',  active: isOn,  activeColor: c.greenDark, onTap: () => context.read<HomeBloc>().add(const ToggleMotor(true)))),
+              Expanded(
+                  child: _ControlButton(
+                label: commandPending ? '…' : '✅  Motor ON',
+                active: isOn,
+                activeColor: c.greenDark,
+                disabled: commandPending,
+                onTap: () =>
+                    context.read<HomeBloc>().add(const ToggleMotor(true)),
+              )),
               const SizedBox(width: 12),
-              Expanded(child: _ControlButton(label: '⬛  Turn OFF', active: !isOn, activeColor: c.redDark,   onTap: () => context.read<HomeBloc>().add(const ToggleMotor(false)))),
+              Expanded(
+                  child: _ControlButton(
+                label: commandPending ? '…' : '⬛  Turn OFF',
+                active: isOff,
+                activeColor: c.redDark,
+                disabled: commandPending,
+                onTap: () =>
+                    context.read<HomeBloc>().add(const ToggleMotor(false)),
+              )),
             ],
           ),
         ],
@@ -90,8 +136,8 @@ class PumpControlCard extends StatelessWidget {
   }
 
   String _modeLabel(MotorMode m) => switch (m) {
-        MotorMode.manual   => 'Manual',
-        MotorMode.auto     => 'Auto\nMode',
+        MotorMode.manual => 'Manual',
+        MotorMode.auto => 'Auto\nMode',
         MotorMode.schedule => 'Schedule',
       };
 }
@@ -111,7 +157,11 @@ class _ModeChip extends StatelessWidget {
         border: Border.all(color: c.green.withValues(alpha: 0.4)),
       ),
       child: Text(mode.name.toUpperCase(),
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.green, letterSpacing: 0.8)),
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: c.green,
+              letterSpacing: 0.8)),
     );
   }
 }
@@ -119,26 +169,55 @@ class _ModeChip extends StatelessWidget {
 class _ControlButton extends StatelessWidget {
   final String label;
   final bool active;
+  final bool disabled;
   final Color activeColor;
   final VoidCallback onTap;
 
-  const _ControlButton({required this.label, required this.active, required this.activeColor, required this.onTap});
+  const _ControlButton({
+    required this.label,
+    required this.active,
+    required this.activeColor,
+    required this.onTap,
+    this.disabled = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final c = context.appColors;
     return GestureDetector(
-      onTap: onTap,
+      onTap: disabled ? null : onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: active ? activeColor.withValues(alpha: 0.25) : c.surfaceElevated,
+          color: disabled
+              ? c.surfaceElevated.withValues(alpha: 0.5)
+              : active
+                  ? activeColor.withValues(alpha: 0.25)
+                  : c.surfaceElevated,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: active ? activeColor : c.cardBorder, width: 1.5),
+          border: Border.all(
+            color: disabled
+                ? c.cardBorder
+                : active
+                    ? activeColor
+                    : c.cardBorder,
+            width: 1.5,
+          ),
         ),
         alignment: Alignment.center,
-        child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: active ? activeColor : c.textMuted)),
+        child: disabled
+            ? SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: c.textMuted),
+              )
+            : Text(label,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: active ? activeColor : c.textMuted)),
       ),
     );
   }

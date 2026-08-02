@@ -5,6 +5,8 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/theme/theme_cubit.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
+import '../../../auth/presentation/bloc/auth_state.dart';
+import '../widgets/edit_society_sheet.dart';
 import '../widgets/profile_section_tile.dart';
 import '../widgets/wifi_ble_setup_sheet.dart';
 
@@ -23,6 +25,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.appColors;
+    final authState = context.read<AuthBloc>().state;
+    final user = authState is AuthAuthenticated ? authState.user : null;
+    final name     = user?.name.isNotEmpty == true ? user!.name : 'Unknown';
+    final mobile   = user?.mobile ?? '';
+    final isAdmin  = user?.isAdmin ?? false;
+    final initials = name.trim().split(' ')
+        .where((w) => w.isNotEmpty)
+        .take(2)
+        .map((w) => w[0].toUpperCase())
+        .join();
+
     return Scaffold(
       backgroundColor: c.background,
       body: SafeArea(
@@ -66,15 +79,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               borderRadius: BorderRadius.circular(16),
                             ),
                             alignment: Alignment.center,
-                            child: const Text('NB', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
+                            child: Text(initials, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
                           ),
                           const SizedBox(width: 14),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Navin Bind', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: c.textPrimary)),
+                              Text(name, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: c.textPrimary)),
                               const SizedBox(height: 3),
-                              Text('+91 93736 36122', style: TextStyle(fontSize: 13, color: c.textSecondary)),
+                              Text(mobile, style: TextStyle(fontSize: 13, color: c.textSecondary)),
                               const SizedBox(height: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
@@ -87,7 +100,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   children: [
                                     const Text('⭐', style: TextStyle(fontSize: 12)),
                                     const SizedBox(width: 4),
-                                    Text('ADMIN', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.orange, letterSpacing: 0.5)),
+                                    Text(isAdmin ? 'ADMIN' : 'MEMBER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.orange, letterSpacing: 0.5)),
                                   ],
                                 ),
                               ),
@@ -102,12 +115,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _SectionCard(children: [
                       ProfileSectionTile(
                         icon: Icon(Icons.apartment, color: c.textSecondary, size: 18),
-                        title: 'Green Valley Society', subtitle: 'Kalyan, Maharashtra', onTap: () {},
-                      ),
-                      Divider(color: c.divider, height: 1, indent: 70),
-                      ProfileSectionTile(
-                        icon: Icon(Icons.group_outlined, color: c.textSecondary, size: 18),
-                        title: 'Manage Members', subtitle: '4 members, 2 admins', onTap: () {},
+                        title: user?.societyName.isNotEmpty == true ? user!.societyName : 'My Society',
+                        subtitle: user?.block.isNotEmpty == true ? user!.block : 'No block set',
+                        onTap: () => EditSocietySheet.show(
+                          context,
+                          societyName: user?.societyName ?? '',
+                          block: user?.block ?? '',
+                        ),
                       ),
                     ]),
                     const SizedBox(height: 20),

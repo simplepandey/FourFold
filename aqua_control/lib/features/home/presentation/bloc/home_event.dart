@@ -8,7 +8,18 @@ abstract class HomeEvent extends Equatable {
 }
 
 class LoadHomeData extends HomeEvent {
-  const LoadHomeData();
+  final String userName;
+  final String serialNumber;
+  final String societyCode;
+  final String commandBy;
+  const LoadHomeData({
+    this.userName = '',
+    this.serialNumber = '',
+    this.societyCode = '',
+    this.commandBy = '',
+  });
+  @override
+  List<Object?> get props => [userName, serialNumber, societyCode, commandBy];
 }
 
 class RefreshStatus extends HomeEvent {
@@ -27,4 +38,12 @@ class ChangeMotorMode extends HomeEvent {
   const ChangeMotorMode(this.mode);
   @override
   List<Object?> get props => [mode];
+}
+
+class SetThresholds extends HomeEvent {
+  final double overcurrent;
+  final double undercurrent;
+  const SetThresholds({required this.overcurrent, required this.undercurrent});
+  @override
+  List<Object?> get props => [overcurrent, undercurrent];
 }

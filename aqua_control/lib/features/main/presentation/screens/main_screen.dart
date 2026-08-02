@@ -23,10 +23,9 @@ class MainScreen extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                _NavItem(icon: Icons.home_outlined,      activeIcon: Icons.home,        label: 'HOME',    selected: navigationShell.currentIndex == 0, onTap: () => navigationShell.goBranch(0)),
-                _NavItem(icon: Icons.bar_chart_outlined, activeIcon: Icons.bar_chart,   label: 'DEVICES', selected: navigationShell.currentIndex == 1, onTap: () => navigationShell.goBranch(1)),
-                _NavItem(icon: Icons.assignment_outlined,activeIcon: Icons.assignment,  label: 'HISTORY', selected: navigationShell.currentIndex == 2, onTap: () => navigationShell.goBranch(2)),
-                _NavItem(icon: Icons.person_outline,     activeIcon: Icons.person,      label: 'PROFILE', selected: navigationShell.currentIndex == 3, onTap: () => navigationShell.goBranch(3)),
+                _NavItem(icon: Icons.home_outlined,      activeIcon: Icons.home,      label: 'HOME',    selected: navigationShell.currentIndex == 0, onTap: () => navigationShell.goBranch(0)),
+                _NavItem(icon: Icons.bar_chart_outlined, activeIcon: Icons.bar_chart, label: 'DEVICES', selected: navigationShell.currentIndex == 1, onTap: () => navigationShell.goBranch(1)),
+                _NavItem(icon: Icons.person_outline,     activeIcon: Icons.person,    label: 'PROFILE', selected: navigationShell.currentIndex == 2, onTap: () => navigationShell.goBranch(2)),
               ],
             ),
           ),

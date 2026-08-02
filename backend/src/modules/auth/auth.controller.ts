@@ -10,6 +10,7 @@ import {
 import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { VerifyOtpTokenDto } from './dto/verify-otp-token.dto';
 import { SocietyLoginDto } from '../societies/dto/society-login.dto';
 import { Public } from '../../common/decorators/public.decorator';
 
@@ -60,11 +61,38 @@ export class AuthController {
     return this.authService.verifyOtp(verifyOtpDto);
   }
 
-  @Post('society-login')
+  @Post('verify-otp-token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify MSG91 widget access token — returns JWT',
+    description:
+      'Client obtains an access token from the MSG91 OTP widget, then sends it here. The server verifies it with MSG91 and returns our own JWT.',
+  })
+  @ApiBody({ type: VerifyOtpTokenDto })
+  @ApiOkResponse({
+    description: 'Token verified, JWT returned',
+    schema: {
+      example: {
+        success: true,
+        message: 'OTP verified successfully',
+        data: {
+          user: { id: 'uuid', phoneNumber: '+919876543210', name: null, isVerified: true },
+          token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+        },
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired access token' })
+  async verifyOtpToken(@Body() dto: VerifyOtpTokenDto) {
+    return this.authService.verifyOtpToken(dto);
+  }
+
+  @Post('user-login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Society login with phone number + password',
-    description: 'Login using the phone number and password set during society registration. Returns a JWT token.',
+    description:
+      'Login using the phone number and password set during society registration. Returns a JWT token.',
   })
   @ApiBody({ type: SocietyLoginDto })
   @ApiOkResponse({

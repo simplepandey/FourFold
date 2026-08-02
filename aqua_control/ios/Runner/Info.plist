@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>AquaControl uses Bluetooth to configure your water controller's Wi-Fi connection.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>AquaControl uses Bluetooth to send Wi-Fi credentials to the controller.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

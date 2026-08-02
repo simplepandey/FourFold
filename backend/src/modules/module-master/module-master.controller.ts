@@ -76,7 +76,10 @@ export class ModuleMasterController {
   // ─── GET BY SERIAL NUMBER ────────────────────────────────
   @Get('serial-number/:serialNumber')
   @ApiOperation({ summary: 'Get a module by serial number' })
-  @ApiParam({ name: 'serialNumber', description: 'Module serial number (may contain hyphens, e.g. SN-2024-001)' })
+  @ApiParam({
+    name: 'serialNumber',
+    description: 'Module serial number (may contain hyphens, e.g. SN-2024-001)',
+  })
   @ApiOkResponse({ description: 'Module found' })
   @ApiNotFoundResponse({ description: 'Module not found' })
   async findBySerialNumber(@Param('serialNumber') serialNumber: string) {
@@ -115,7 +118,11 @@ export class ModuleMasterController {
     description: 'Sets isDeleted = true. The record stays in the database.',
   })
   @ApiParam({ name: 'id', description: 'Module UUID' })
-  @ApiQuery({ name: 'deletedBy', required: true, description: 'ID or name of the user deleting this record' })
+  @ApiQuery({
+    name: 'deletedBy',
+    required: true,
+    description: 'ID or name of the user deleting this record',
+  })
   @ApiOkResponse({ description: 'Module deleted successfully' })
   @ApiNotFoundResponse({ description: 'Module not found' })
   async remove(@Param('id') id: string, @Query('deletedBy') deletedBy: string) {

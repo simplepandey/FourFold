@@ -21,7 +21,9 @@ export default () => ({
     },
     msg91: {
       authKey: process.env.MSG91_AUTH_KEY,
+      widgetAuthKey: process.env.MSG91_WIDGET_AUTH_KEY,
       senderId: process.env.MSG91_SENDER_ID,
+      templateId: process.env.MSG91_TEMPLATE_ID,
     },
     awsSns: {
       region: process.env.AWS_REGION,
@@ -29,11 +31,17 @@ export default () => ({
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     },
   },
+  device: {
+    basicAuth: {
+      username: process.env.DEVICE_BASIC_AUTH_USERNAME || 'fourfold',
+      password: process.env.DEVICE_BASIC_AUTH_PASSWORD || 'fourfold',
+    },
+  },
   mqtt: {
     host: process.env.MQTT_HOST || 'localhost',
     port: parseInt(process.env.MQTT_PORT, 10) || 1883,
     username: process.env.MQTT_USERNAME,
     password: process.env.MQTT_PASSWORD,
-    telemetryTopic: process.env.MQTT_TELEMETRY_TOPIC || 'societies/+/motors/+/telemetry',
+    telemetryTopic: process.env.MQTT_TELEMETRY_TOPIC || 'motors/+/telemetry',
   },
 });

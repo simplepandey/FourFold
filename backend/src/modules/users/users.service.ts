@@ -30,6 +30,10 @@ export class UsersService {
     return this.usersRepository.update(id, data);
   }
 
+  async setPassword(id: string, hashedPassword: string): Promise<User> {
+    return this.usersRepository.update(id, { password: hashedPassword });
+  }
+
   async findAll(): Promise<User[]> {
     return this.usersRepository.findAll();
   }

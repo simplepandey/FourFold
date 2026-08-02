@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/config/app_config.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
@@ -30,19 +29,30 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
   final _hpCtrl = TextEditingController();
   String _phase = '1-Phase';
 
+  // Step 2 — location
+  final _addressCtrl  = TextEditingController();
+  final _wingCtrl     = TextEditingController();
+  final _pincodeCtrl  = TextEditingController();
+  final _districtCtrl = TextEditingController();
+
   @override
   void dispose() {
     _serialCtrl.dispose();
     _hpCtrl.dispose();
+    _addressCtrl.dispose();
+    _wingCtrl.dispose();
+    _pincodeCtrl.dispose();
+    _districtCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _validateSerial() async {
-    final serial = _serialCtrl.text.trim();
+    final serial = _serialCtrl.text.trim().toUpperCase();
     if (serial.isEmpty) {
       setState(() => _error = 'Please enter a serial number');
       return;
     }
+    _serialCtrl.text = serial; // normalize displayed text before moving to step 1
     setState(() { _isLoading = true; _error = null; });
     try {
       final repo = context.read<DeviceRepository>();
@@ -52,25 +62,40 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = 'Incorrect serial number';
+          _error = e.toString().replaceAll('Exception: ', '');
         });
       }
     }
   }
 
-  Future<void> _submitRegistration() async {
+  void _advanceToLocation() {
     final hp = double.tryParse(_hpCtrl.text.trim());
     if (hp == null || hp <= 0) {
       setState(() => _error = 'Please enter a valid HP (e.g. 1.5)');
       return;
     }
+    setState(() { _step = 2; _error = null; });
+  }
+
+  Future<void> _submitRegistration() async {
+    final address  = _addressCtrl.text.trim();
+    final wing     = _wingCtrl.text.trim();
+    final pincode  = _pincodeCtrl.text.trim();
+    final district = _districtCtrl.text.trim();
+
+    if (address.isEmpty || wing.isEmpty || pincode.isEmpty || district.isEmpty) {
+      setState(() => _error = 'Please fill in all location fields');
+      return;
+    }
 
     final authState = context.read<AuthBloc>().state;
+    String societyCode = '';
     String userId = '';
     String userName = '';
     if (authState is AuthAuthenticated) {
-      userId = authState.user.id;
-      userName = authState.user.name;
+      societyCode = authState.user.societyCode;
+      userId      = authState.user.id;
+      userName    = authState.user.name;
     }
 
     setState(() { _isLoading = true; _error = null; });
@@ -78,13 +103,18 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
       final repo = context.read<DeviceRepository>();
       await repo.registerModule(
         serialNumber: _serialCtrl.text.trim(),
-        registeredTo: userId,
-        noOfPump: _noOfPumps,
-        phase: _phase,
-        hpOfPump: hp,
-        createdBy: userName.isNotEmpty ? userName : 'app',
+        societyCode:  societyCode,
+        noOfPump:     _noOfPumps,
+        phase:        _phase,
+        hpOfPump:     double.parse(_hpCtrl.text.trim()),
+        address:      address,
+        wingBlock:    wing,
+        pincode:      pincode,
+        district:     district,
+        createdBy:    userName.isNotEmpty ? userName : 'app',
+        userId:       userId.isNotEmpty ? userId : null,
       );
-      if (mounted) setState(() { _step = 2; _isLoading = false; });
+      if (mounted) setState(() { _step = 3; _isLoading = false; });
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -146,8 +176,18 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
             error: _error,
             onPumpsChanged: (v) => setState(() => _noOfPumps = v),
             onPhaseChanged: (v) => setState(() => _phase = v),
-            onSubmit: _submitRegistration,
+            onSubmit: _advanceToLocation,
             onBack: () => setState(() { _step = 0; _error = null; }),
+          ),
+        2 => _LocationStep(
+            addressCtrl: _addressCtrl,
+            wingCtrl: _wingCtrl,
+            pincodeCtrl: _pincodeCtrl,
+            districtCtrl: _districtCtrl,
+            isLoading: _isLoading,
+            error: _error,
+            onSubmit: _submitRegistration,
+            onBack: () => setState(() { _step = 1; _error = null; }),
           ),
         _ => _DoneStep(onDone: () => context.pop()),
       };
@@ -163,7 +203,7 @@ class _StepIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.appColors;
     return Row(
-      children: List.generate(3, (i) {
+      children: List.generate(4, (i) {
         final done = i < currentStep;
         final active = i == currentStep;
         return Expanded(
@@ -181,7 +221,7 @@ class _StepIndicator extends StatelessWidget {
                     ? const Icon(Icons.check, color: Colors.white, size: 14)
                     : Text('${i + 1}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: active ? Colors.white : c.textMuted)),
               ),
-              if (i < 2)
+              if (i < 3)
                 Expanded(child: Container(height: 2, color: done ? c.green : c.cardBorder)),
             ],
           ),
@@ -252,22 +292,11 @@ class _ScanStep extends StatelessWidget {
             label: 'SERIAL NUMBER',
             hint: 'e.g. SN-2024-001',
             controller: serialCtrl,
-            inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+            inputFormatters: [
+              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+              _UpperCaseFormatter(),
+            ],
           ),
-          if (AppConfig.useMock) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(color: c.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, size: 14, color: c.primary),
-                  const SizedBox(width: 8),
-                  Text('Mock mode: any serial number is accepted', style: TextStyle(fontSize: 12, color: c.primary)),
-                ],
-              ),
-            ),
-          ],
           if (error != null) ...[
             const SizedBox(height: 12),
             _ErrorBanner(message: error!),
@@ -370,7 +399,89 @@ class _DetailsStep extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: isLoading
-                    ? _LoadingButton(label: 'Registering…')
+                    ? _LoadingButton(label: 'Validating…')
+                    : CustomButton(label: 'Next →', onTap: onSubmit),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Step 2: Location ─────────────────────────────────────────
+
+class _LocationStep extends StatelessWidget {
+  final TextEditingController addressCtrl;
+  final TextEditingController wingCtrl;
+  final TextEditingController pincodeCtrl;
+  final TextEditingController districtCtrl;
+  final bool isLoading;
+  final String? error;
+  final VoidCallback onSubmit;
+  final VoidCallback onBack;
+
+  const _LocationStep({
+    required this.addressCtrl,
+    required this.wingCtrl,
+    required this.pincodeCtrl,
+    required this.districtCtrl,
+    required this.isLoading,
+    required this.error,
+    required this.onSubmit,
+    required this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.appColors;
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Device Location', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: c.textPrimary)),
+          const SizedBox(height: 6),
+          Text('Enter the installation address of the module.', style: TextStyle(fontSize: 14, color: c.textSecondary)),
+          const SizedBox(height: 28),
+
+          CustomTextField(label: 'ADDRESS', hint: 'e.g. Plot 12, Near Water Tank', controller: addressCtrl),
+          const SizedBox(height: 20),
+          CustomTextField(label: 'WING / BLOCK', hint: 'e.g. A Wing', controller: wingCtrl),
+          const SizedBox(height: 20),
+          CustomTextField(
+            label: 'PINCODE',
+            hint: 'e.g. 411001',
+            controller: pincodeCtrl,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          ),
+          const SizedBox(height: 20),
+          CustomTextField(label: 'DISTRICT', hint: 'e.g. Pune', controller: districtCtrl),
+          const SizedBox(height: 20),
+
+          // Hardcoded state & country
+          Row(
+            children: [
+              Expanded(child: _ReadOnlyChip(label: 'STATE', value: 'Maharashtra', colors: c)),
+              const SizedBox(width: 12),
+              Expanded(child: _ReadOnlyChip(label: 'COUNTRY', value: 'India', colors: c)),
+            ],
+          ),
+
+          if (error != null) ...[
+            const SizedBox(height: 16),
+            _ErrorBanner(message: error!),
+          ],
+          const SizedBox(height: 28),
+          Row(
+            children: [
+              Expanded(child: CustomButton(label: '← Back', variant: ButtonVariant.secondary, onTap: isLoading ? () {} : onBack)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: isLoading
+                    ? const _LoadingButton(label: 'Registering…')
                     : CustomButton(label: 'Register Device', onTap: onSubmit),
               ),
             ],
@@ -382,7 +493,36 @@ class _DetailsStep extends StatelessWidget {
   }
 }
 
-// ─── Step 2: Done ─────────────────────────────────────────────
+class _ReadOnlyChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final dynamic colors;
+  const _ReadOnlyChip({required this.label, required this.value, required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: c.textLabel, letterSpacing: 1.2)),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: c.surfaceElevated,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: c.cardBorder),
+          ),
+          child: Text(value, style: TextStyle(fontSize: 15, color: c.textMuted)),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Step 3: Done ─────────────────────────────────────────────
 
 class _DoneStep extends StatelessWidget {
   final VoidCallback onDone;
@@ -490,6 +630,12 @@ class _ErrorBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+class _UpperCaseFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue old, TextEditingValue next) =>
+      next.copyWith(text: next.text.toUpperCase(), selection: next.selection);
 }
 
 class _LoadingButton extends StatelessWidget {

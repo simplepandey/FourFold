@@ -20,23 +20,34 @@ class HomeLoaded extends HomeState {
   final String userName;
   final String societyInfo;
   final int motorsOnline;
+  final bool commandPending;
+  final String? motorError;
 
   const HomeLoaded({
     required this.status,
     required this.userName,
     required this.societyInfo,
     required this.motorsOnline,
+    this.commandPending = false,
+    this.motorError,
   });
 
-  HomeLoaded copyWith({PumpStatusModel? status}) => HomeLoaded(
+  HomeLoaded copyWith({
+    PumpStatusModel? status,
+    bool? commandPending,
+    String? motorError,
+    bool clearError = false,
+  }) => HomeLoaded(
         status: status ?? this.status,
         userName: userName,
         societyInfo: societyInfo,
         motorsOnline: motorsOnline,
+        commandPending: commandPending ?? this.commandPending,
+        motorError: clearError ? null : (motorError ?? this.motorError),
       );
 
   @override
-  List<Object?> get props => [status, userName];
+  List<Object?> get props => [status, userName, commandPending, motorError];
 }
 
 class HomeError extends HomeState {

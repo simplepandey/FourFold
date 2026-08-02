@@ -60,12 +60,12 @@ async function bootstrap() {
       .setTitle('FourFold API')
       .setDescription(
         '## FourFold Backend API\n\n' +
-        '### How to authenticate\n' +
-        '1. Call **POST /api/v1/auth/send-otp** with your phone number\n' +
-        '2. Call **POST /api/v1/auth/verify-otp** with the OTP — copy the `token` from the response\n' +
-        '3. Click the **Authorize 🔒** button at the top right\n' +
-        '4. Paste the token in the **Value** field and click **Authorize**\n' +
-        '5. All protected endpoints will now send the token automatically',
+          '### How to authenticate\n' +
+          '1. Call **POST /api/v1/auth/send-otp** with your phone number\n' +
+          '2. Call **POST /api/v1/auth/verify-otp** with the OTP — copy the `token` from the response\n' +
+          '3. Click the **Authorize 🔒** button at the top right\n' +
+          '4. Paste the token in the **Value** field and click **Authorize**\n' +
+          '5. All protected endpoints will now send the token automatically',
       )
       .setVersion('1.0')
       .addBearerAuth(
@@ -74,10 +74,19 @@ async function bootstrap() {
           scheme: 'bearer',
           bearerFormat: 'JWT',
           name: 'JWT',
-          description: 'Paste the JWT token from the verify-otp response (without the "Bearer" prefix)',
+          description:
+            'Paste the JWT token from the verify-otp response (without the "Bearer" prefix)',
           in: 'header',
         },
         'JWT-auth',
+      )
+      .addBasicAuth(
+        {
+          type: 'http',
+          scheme: 'basic',
+          description: 'Device Basic Auth — Username: user-fourfold / Password: password-fourfold',
+        },
+        'basic-auth',
       )
       .addTag('Auth', 'OTP-based authentication — no token required')
       .addTag('Users', 'User profile — requires JWT token')
@@ -87,11 +96,35 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup('api/docs', app, document, {
       swaggerOptions: {
-        persistAuthorization: true,       // token survives page refresh
-        displayRequestDuration: true,     // shows how long each request took
-        filter: true,                     // search box to filter endpoints
-        tryItOutEnabled: true,            // "Try it out" open by default
+        persistAuthorization: true,
+        displayRequestDuration: true,
+        filter: true,
+        tryItOutEnabled: true,
       },
+      customCss: `
+        .swagger-ui .dialog-ux .modal-ux,
+        .swagger-ui .dialog-ux .modal-ux-content,
+        .swagger-ui .dialog-ux .modal-ux-header {
+          background: #fff !important;
+          color: #3b4151 !important;
+        }
+        .swagger-ui .dialog-ux .modal-ux-header h3,
+        .swagger-ui .dialog-ux .modal-ux-content h4,
+        .swagger-ui .dialog-ux .modal-ux-content p,
+        .swagger-ui .dialog-ux .modal-ux-content label {
+          color: #3b4151 !important;
+        }
+        .swagger-ui .dialog-ux .modal-ux-content input[type=text],
+        .swagger-ui .dialog-ux .modal-ux-content input[type=password] {
+          background: #fff !important;
+          color: #3b4151 !important;
+          border: 1px solid #d9d9d9 !important;
+        }
+        .swagger-ui .auth-container .scopes h2,
+        .swagger-ui .auth-container .auth-btn-wrapper p {
+          color: #3b4151 !important;
+        }
+      `,
     });
 
     logger.log(`Swagger UI: http://localhost:${port}/api/docs`);

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/config/app_config.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/custom_button.dart';
 import '../../../../core/widgets/custom_text_field.dart';
@@ -202,38 +201,6 @@ class _MobileStep extends StatelessWidget {
         Text('Create Account', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: c.textPrimary)),
         const SizedBox(height: 6),
         Text('Enter your mobile number to get started.', style: TextStyle(fontSize: 14, color: c.textSecondary)),
-        if (AppConfig.useMock) ...[
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: c.orange.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: c.orange.withValues(alpha: 0.3)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Icon(Icons.science_outlined, color: c.orange, size: 13),
-                  const SizedBox(width: 5),
-                  Text('MOCK MODE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.orange, letterSpacing: 1.0)),
-                ]),
-                const SizedBox(height: 6),
-                Row(children: [
-                  Text('Phone: ', style: TextStyle(fontSize: 12, color: c.textSecondary)),
-                  Text(AppConfig.mockPhone, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.orange, fontFamily: 'monospace')),
-                ]),
-                const SizedBox(height: 2),
-                Row(children: [
-                  Text('OTP: ', style: TextStyle(fontSize: 12, color: c.textSecondary)),
-                  Text(AppConfig.mockOtp, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.orange, fontFamily: 'monospace')),
-                ]),
-              ],
-            ),
-          ),
-        ],
         const SizedBox(height: 24),
         CustomTextField(
           label: 'MOBILE NUMBER',
@@ -306,22 +273,6 @@ class _OtpStep extends StatelessWidget {
               },
             ),
           )),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: c.orange.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: c.orange.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline, color: c.orange, size: 14),
-              const SizedBox(width: 8),
-              Text('Mock mode: use OTP 123456', style: TextStyle(fontSize: 12, color: c.orange, fontWeight: FontWeight.w500)),
-            ],
-          ),
         ),
         const SizedBox(height: 32),
         BlocBuilder<AuthBloc, AuthState>(

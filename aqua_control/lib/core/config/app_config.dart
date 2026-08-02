@@ -1,28 +1,131 @@
-enum AppEnv { local1, local }
+enum AppEnv { local, dev, prod }
+
+abstract class _EnvConfig {
+  String get baseUrl;
+  String get userLogin;
+  String get verifyOtpToken;
+  String get createSociety;
+  String get deviceRegister;
+  String get deviceInfo;
+  String get moduleRegistration;
+  String get motorCommand;
+  String societyMembers(String societyId);
+  String societyMember(String societyId, String memberId);
+}
+
+class _LocalConfig extends _EnvConfig {
+  @override
+  String get baseUrl => 'http://192.168.1.3:3000/api/v1';
+  @override
+  String get userLogin => '/auth/user-login';
+  @override
+  String get verifyOtpToken => '/auth/verify-otp-token';
+  @override
+  String get createSociety => '/societies';
+  @override
+  String get deviceRegister => '/device/register';
+  @override
+  String get deviceInfo => '/device/info';
+  @override
+  String get moduleRegistration => '/module-registration';
+  @override
+  String get motorCommand => '/motor/command';
+  @override
+  String societyMembers(String societyId) => '/societies/$societyId/members';
+  @override
+  String societyMember(String societyId, String memberId) =>
+      '/societies/$societyId/members/$memberId';
+}
+
+class _DevConfig extends _EnvConfig {
+  @override
+  String get baseUrl => 'https://dev-api.aquacontrol.in/api/v1';
+  @override
+  String get userLogin => '/auth/user-login';
+  @override
+  String get verifyOtpToken => '/auth/verify-otp-token';
+  @override
+  String get createSociety => '/societies';
+  @override
+  String get deviceRegister => '/device/register';
+  @override
+  String get deviceInfo => '/device/info';
+  @override
+  String get moduleRegistration => '/module-registration';
+  @override
+  String get motorCommand => '/motor/command';
+  @override
+  String societyMembers(String societyId) => '/societies/$societyId/members';
+  @override
+  String societyMember(String societyId, String memberId) =>
+      '/societies/$societyId/members/$memberId';
+}
+
+class _ProdConfig extends _EnvConfig {
+  @override
+  String get baseUrl => 'https://api.aquacontrol.in/api/v1';
+  @override
+  String get userLogin => '/auth/user-login';
+  @override
+  String get verifyOtpToken => '/auth/verify-otp-token';
+  @override
+  String get createSociety => '/societies';
+  @override
+  String get deviceRegister => '/device/register';
+  @override
+  String get deviceInfo => '/device/info';
+  @override
+  String get moduleRegistration => '/module-registration';
+  @override
+  String get motorCommand => '/motor/command';
+  @override
+  String societyMembers(String societyId) => '/societies/$societyId/members';
+  @override
+  String societyMember(String societyId, String memberId) =>
+      '/societies/$societyId/members/$memberId';
+}
 
 class AppConfig {
   AppConfig._();
 
-  // Change to AppEnv.local to hit the real backend
-  static AppEnv env = AppEnv.local1;
+  // ─── MSG91 widget credentials ─────────────────────────────
+  static const String msg91WidgetId = '3668616c4c50393534343631';
+  static const String msg91AuthToken = '556358Tm54jk2S6a6de516P1';
 
-  static bool get useMock => env == AppEnv.local1;
+  static const String _envName =
+      String.fromEnvironment('APP_ENV', defaultValue: 'local');
 
-  // Backend: NestJS on :3000, global prefix /api, URI version /v1
-  static String get baseUrl => switch (env) {
-        AppEnv.local1 => '',
-        AppEnv.local  => 'http://localhost:3000/api/v1',
+  static AppEnv get env => switch (_envName) {
+        'dev' => AppEnv.dev,
+        'prod' => AppEnv.prod,
+        _ => AppEnv.local,
       };
 
-  // ─── Endpoints ────────────────────────────────────────────
-  static const String sendOtp      = '/auth/send-otp';
-  static const String verifyOtp    = '/auth/verify-otp';
-  static const String societyLogin = '/auth/society-login';
-  static const String createSociety = '/societies';
-  static const String moduleMasterBySerial = '/module-master/serial-number';
-  static const String moduleRegistration   = '/module-registration';
+  static bool get useMock => false;
 
-  // ─── Mock credentials (shown as hints in UI) ──────────────
+  static _EnvConfig get _config => switch (env) {
+        AppEnv.local => _LocalConfig(),
+        AppEnv.dev => _DevConfig(),
+        AppEnv.prod => _ProdConfig(),
+      };
+
+  static String get baseUrl => _config.baseUrl;
+  static String get userLogin => _config.userLogin;
+  static String get verifyOtpToken => _config.verifyOtpToken;
+  static String get createSociety => _config.createSociety;
+  static String get deviceRegister => _config.deviceRegister;
+  static String get deviceInfo => _config.deviceInfo;
+  static String userModules(String userId) => '/device/user-modules/$userId';
+  static String get moduleRegistration => _config.moduleRegistration;
+  static String get motorCommand => _config.motorCommand;
+  static String moduleStatus(String serialNumber) =>
+      '/module-status/$serialNumber';
+  static String moduleActionLogs(String serialNumber) =>
+      '/module-action-logs/$serialNumber';
+  static String societyMembers(String societyId) =>
+      _config.societyMembers(societyId);
+  static String societyMember(String societyId, String memberId) =>
+      _config.societyMember(societyId, memberId);
+
   static const String mockPhone = '+919876543210';
-  static const String mockOtp   = '123456';
 }

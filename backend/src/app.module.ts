@@ -9,6 +9,11 @@ import { SocietiesModule } from './modules/societies/societies.module';
 import { ModuleMasterModule } from './modules/module-master/module-master.module';
 import { ModuleRegistrationModule } from './modules/module-registration/module-registration.module';
 import { MqttModule } from './modules/mqtt/mqtt.module';
+import { MotorCommandModule } from './modules/motor/motor-command.module';
+import { DeviceModule } from './modules/device/device.module';
+import { TelemetryModule } from './modules/telemetry/telemetry.module';
+import { ModuleStatusModule } from './modules/module-status/module-status.module';
+import { ModuleActionLogModule } from './modules/module-action-log/module-action-log.module';
 import configuration from './config/configuration';
 
 @Module({
@@ -21,8 +26,8 @@ import configuration from './config/configuration';
     // Rate limiting — apply ThrottlerGuard to specific routes or globally as needed
     ThrottlerModule.forRoot([
       {
-        ttl: 60000,  // 1 minute window
-        limit: 10,   // max 10 requests per window
+        ttl: 60000, // 1 minute window
+        limit: 10, // max 10 requests per window
       },
     ]),
     PrismaModule,
@@ -33,6 +38,11 @@ import configuration from './config/configuration';
     ModuleMasterModule,
     ModuleRegistrationModule,
     MqttModule,
+    MotorCommandModule,
+    DeviceModule,
+    TelemetryModule,
+    ModuleStatusModule,
+    ModuleActionLogModule,
   ],
 })
 export class AppModule {}

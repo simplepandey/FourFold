@@ -11,6 +11,7 @@ model User {
   id          String   @id @default(uuid())
   phoneNumber String   @unique
   name        String?
+  password    String?
   isVerified  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -34,17 +35,34 @@ model Otp {
 
 model Society {
   id           String   @id @default(uuid())
+  societyCode  String?  @unique
   phoneNumber  String   @unique
   name         String
   societyName  String
   blockOrWing  String
   totalMembers Int
-  password     String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@index([phoneNumber])
+  @@index([societyCode])
   @@map("societies")
+}
+
+model SocietyMember {
+  id           String   @id @default(uuid())
+  societyCode  String
+  phoneNumber  String
+  userId       String?
+  serialNumber String?
+  role         String   @default("member")
+  joinedAt     DateTime @default(now())
+
+  @@unique([societyCode, phoneNumber])
+  @@index([societyCode])
+  @@index([userId])
+  @@index([phoneNumber])
+  @@map("society_members")
 }
 
 model ModuleMaster {
@@ -62,19 +80,133 @@ model ModuleMaster {
 }
 
 model ModuleRegistration {
-  id                 String    @id @default(uuid())
-  moduleSerialNumber String
-  registeredTo       String
-  noOfPump           Int
-  phase              String
-  hpOfPump           Float
-  createdBy          String
-  createDate         DateTime  @default(now())
-  updatedBy          String?
-  updateDate         DateTime  @updatedAt
-  isDeleted          Boolean   @default(false)
+  id           String    @id @default(uuid())
+  serialNumber String
+  registeredTo String
+  noOfPump     Int
+  phase        String
+  hpOfPump     Float
+  address      String
+  wingBlock    String
+  pincode      String
+  district     String
+  state        String    @default("Maharashtra")
+  country      String    @default("India")
+  createdBy    String
+  createDate   DateTime  @default(now())
+  updatedBy    String?
+  updateDate   DateTime  @updatedAt
+  isDeleted    Boolean   @default(false)
 
-  @@index([moduleSerialNumber])
+  @@index([serialNumber])
   @@index([isDeleted])
   @@map("module_registration")
+}
+
+model MotorCommand {
+  id          String   @id @default(uuid())
+  societyCode String
+  motorId     String
+  command     String
+  commandBy   String
+  cmdId       String   @default(uuid())
+  status      String   @default("sent")
+  createDate  DateTime @default(now())
+
+  @@index([societyCode])
+  @@index([motorId])
+  @@map("motor_commands")
+}
+
+model EspRegistration {
+  id             String   @id @default(uuid())
+  serialNumber   String
+  serialHash     String
+  username       String?
+  userId         String?
+  societyId      String?
+  commandTopic   String
+  telemetryTopic String
+  alertTopic     String
+  heartbeatTopic String
+  createdAt      DateTime @default(now())
+
+  @@index([serialNumber])
+  @@index([serialHash])
+  @@map("esp_registrations")
+}
+
+model MotorTelemetry {
+  id           String   @id @default(uuid())
+  serialHash   String
+  serialNumber String
+  voltage      Float
+  current      Float
+  overcurrent  Float
+  undercurrent Float
+  groundTank   Float?
+  overheadTank Float?
+  motorRunning Boolean
+  recordedAt   DateTime @default(now())
+
+  @@index([serialHash])
+  @@map("motor_telemetry")
+}
+
+model MotorAlert {
+  id                   String   @id @default(uuid())
+  serialHash           String
+  serialNumber         String
+  overcurrentBreached  Float?
+  undercurrentBreached Float?
+  recordedAt           DateTime @default(now())
+
+  @@index([serialHash])
+  @@map("motor_alerts")
+}
+
+model ModuleStatus {
+  id                   String   @id @default(uuid())
+  serialNumber         String   @unique
+  voltage              Float    @default(0)
+  current              Float    @default(0)
+  overcurrent          Float    @default(0)
+  undercurrent         Float    @default(0)
+  overheadTankLevel    Int      @default(0)
+  undergroundTankLevel Int      @default(0)
+  motorStatus          String   @default("OFF")
+  ocBreached           Boolean  @default(false)
+  ucBreached           Boolean  @default(false)
+  updatedAt            DateTime @updatedAt
+  updatedBy            String?
+
+  @@index([serialNumber])
+  @@map("module_status")
+}
+
+model TopicPatternToSubscribe {
+  id        String   @id @default(uuid())
+  pattern   String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("topic_pattern_to_subscribe")
+}
+
+model ModuleActionLog {
+  id                   String   @id @default(uuid())
+  serialNumber         String
+  voltage              Float    @default(0)
+  current              Float    @default(0)
+  overcurrent          Float    @default(0)
+  undercurrent         Float    @default(0)
+  overheadTankLevel    Int      @default(0)
+  undergroundTankLevel Int      @default(0)
+  motorStatus          String
+  ocBreached           Boolean  @default(false)
+  ucBreached           Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  createdBy            String?
+
+  @@index([serialNumber])
+  @@map("module_action_logs")
 }

@@ -1,8 +1,20 @@
-import { IsString, IsInt, IsNumber, IsOptional, IsNotEmpty, IsDateString, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsNotEmpty,
+  IsDateString,
+  Min,
+  Max,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateModuleRegistrationDto {
-  @ApiPropertyOptional({ example: 'new-user-id', description: 'Updated user or entity this module is registered to' })
+  @ApiPropertyOptional({
+    example: 'new-user-id',
+    description: 'Updated user or entity this module is registered to',
+  })
   @IsString()
   @IsOptional()
   registeredTo?: string;
@@ -31,7 +43,10 @@ export class UpdateModuleRegistrationDto {
   @IsNotEmpty()
   updatedBy: string;
 
-  @ApiPropertyOptional({ example: '2026-05-20T12:00:00.000Z', description: 'Custom update date (defaults to server time if omitted)' })
+  @ApiPropertyOptional({
+    example: '2026-05-20T12:00:00.000Z',
+    description: 'Custom update date (defaults to server time if omitted)',
+  })
   @IsOptional()
   @IsDateString()
   updateDate?: string;
