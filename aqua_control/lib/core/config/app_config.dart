@@ -68,7 +68,7 @@ class _DevConfig extends _EnvConfig {
 
 class _ProdConfig extends _EnvConfig {
   @override
-  String get baseUrl => 'https://api.aquacontrol.in/api/v1';
+  String get baseUrl => 'https://api.fourfoldsystem.com/api/v1';
   @override
   String get userLogin => '/auth/user-login';
   @override
