@@ -1,0 +1,12 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="FourFold System logo">
+  <defs>
+    <linearGradient id="fMarkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2f6df6"/>
+      <stop offset="55%" stop-color="#3fa0f8"/>
+      <stop offset="100%" stop-color="#38d9e8"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="24" height="84" rx="4" fill="url(#fMarkGrad)"/>
+  <path d="M8 8 H82 L60 34 H8 Z" fill="url(#fMarkGrad)"/>
+  <path d="M8 46 H66 L46 70 H8 Z" fill="url(#fMarkGrad)" opacity="0.88"/>
+</svg>

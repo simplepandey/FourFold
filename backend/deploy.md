@@ -192,6 +192,8 @@ services:
       - '127.0.0.1:3000:3000'   # only reachable via Nginx, not directly from outside
     env_file:
       - .env
+    volumes:
+      - ./logs:/usr/src/app/logs   # persists app-YYYY-MM-DD.log / error-YYYY-MM-DD.log on the host
 ```
 
 ## Step 11 — Build and Start
@@ -222,6 +224,25 @@ Expected:
 ```
 
 If `PrismaService` fails to connect: re-check Part 3 Step 6 (firewall) and the `DATABASE_URL` in `.env`.
+
+## Step 12b — File Logs + 6-Month Retention Cron
+
+The app writes structured logs to disk (via `winston`/`nest-winston`, `src/common/logger/winston.config.ts`) in addition to the console output `docker compose logs` already shows — console output disappears once a container is removed/rebuilt, these files don't:
+
+```
+backend/logs/app-2026-08-05.log     # all levels
+backend/logs/error-2026-08-05.log   # errors only
+```
+
+One file per day, new files start automatically at midnight — no manual rotation step needed. The app itself never deletes old files (no `maxFiles` set on the transport), so retention is handled entirely by a cron:
+
+```bash
+# Runs daily at 3:15am — deletes any log file untouched for 180+ days
+(crontab -l 2>/dev/null; echo "15 3 * * * find /opt/fourfold/backend/logs -type f -mtime +180 -delete") | crontab -
+
+# Verify it's installed
+crontab -l
+```
 
 ## Step 13 — Push the Schema
 
