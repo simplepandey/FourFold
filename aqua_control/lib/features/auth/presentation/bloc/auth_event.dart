@@ -31,6 +31,31 @@ class VerifyLoginOtp extends AuthEvent {
   List<Object?> get props => [mobile, otp];
 }
 
+// ─── Forgot password ──────────────────────────────────────────
+
+class SendForgotPasswordOtp extends AuthEvent {
+  final String mobile;
+  const SendForgotPasswordOtp(this.mobile);
+  @override
+  List<Object?> get props => [mobile];
+}
+
+class VerifyForgotPasswordOtp extends AuthEvent {
+  final String mobile;
+  final String otp;
+  const VerifyForgotPasswordOtp(this.mobile, this.otp);
+  @override
+  List<Object?> get props => [mobile, otp];
+}
+
+class ResetPassword extends AuthEvent {
+  final String mobile;
+  final String newPassword;
+  const ResetPassword(this.mobile, this.newPassword);
+  @override
+  List<Object?> get props => [mobile, newPassword];
+}
+
 // ─── Registration ─────────────────────────────────────────────
 
 class SendRegistrationOtp extends AuthEvent {

@@ -4,6 +4,7 @@ abstract class _EnvConfig {
   String get baseUrl;
   String get userLogin;
   String get verifyOtpToken;
+  String get resetPassword;
   String get createSociety;
   String get deviceRegister;
   String get deviceInfo;
@@ -15,11 +16,13 @@ abstract class _EnvConfig {
 
 class _LocalConfig extends _EnvConfig {
   @override
-  String get baseUrl => 'http://192.168.1.3:3000/api/v1';
+  String get baseUrl => 'http://192.168.1.12:3000/api/v1';
   @override
   String get userLogin => '/auth/user-login';
   @override
   String get verifyOtpToken => '/auth/verify-otp-token';
+  @override
+  String get resetPassword => '/auth/reset-password';
   @override
   String get createSociety => '/societies';
   @override
@@ -45,6 +48,8 @@ class _DevConfig extends _EnvConfig {
   @override
   String get verifyOtpToken => '/auth/verify-otp-token';
   @override
+  String get resetPassword => '/auth/reset-password';
+  @override
   String get createSociety => '/societies';
   @override
   String get deviceRegister => '/device/register';
@@ -68,6 +73,8 @@ class _ProdConfig extends _EnvConfig {
   String get userLogin => '/auth/user-login';
   @override
   String get verifyOtpToken => '/auth/verify-otp-token';
+  @override
+  String get resetPassword => '/auth/reset-password';
   @override
   String get createSociety => '/societies';
   @override
@@ -112,6 +119,7 @@ class AppConfig {
   static String get baseUrl => _config.baseUrl;
   static String get userLogin => _config.userLogin;
   static String get verifyOtpToken => _config.verifyOtpToken;
+  static String get resetPassword => _config.resetPassword;
   static String get createSociety => _config.createSociety;
   static String get deviceRegister => _config.deviceRegister;
   static String get deviceInfo => _config.deviceInfo;

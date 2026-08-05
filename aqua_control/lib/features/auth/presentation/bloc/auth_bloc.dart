@@ -14,6 +14,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<LoginWithPassword>(_onLoginWithPassword);
     on<SendLoginOtp>(_onSendLoginOtp);
     on<VerifyLoginOtp>(_onVerifyLoginOtp);
+    // Forgot password
+    on<SendForgotPasswordOtp>(_onSendForgotPasswordOtp);
+    on<VerifyForgotPasswordOtp>(_onVerifyForgotPasswordOtp);
+    on<ResetPassword>(_onResetPassword);
     // Registration
     on<SendRegistrationOtp>(_onSendRegistrationOtp);
     on<VerifyRegistrationOtp>(_onVerifyRegistrationOtp);
@@ -76,6 +80,53 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final user = await _repo.verifyLoginOtp(
         mobile: event.mobile,
         otp: event.otp,
+      );
+      emit(AuthAuthenticated(user));
+    } catch (e) {
+      emit(AuthFailure(_message(e)));
+    }
+  }
+
+  // ─── Forgot password ──────────────────────────────────────────
+
+  Future<void> _onSendForgotPasswordOtp(
+    SendForgotPasswordOtp event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(const AuthLoading());
+    try {
+      await _repo.sendForgotPasswordOtp(event.mobile);
+      emit(ForgotPasswordOtpSent(event.mobile));
+    } catch (e) {
+      emit(AuthFailure(_message(e)));
+    }
+  }
+
+  Future<void> _onVerifyForgotPasswordOtp(
+    VerifyForgotPasswordOtp event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(const AuthLoading());
+    try {
+      await _repo.verifyForgotPasswordOtp(
+        mobile: event.mobile,
+        otp: event.otp,
+      );
+      emit(ForgotPasswordOtpVerified(event.mobile));
+    } catch (e) {
+      emit(AuthFailure(_message(e)));
+    }
+  }
+
+  Future<void> _onResetPassword(
+    ResetPassword event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(const AuthLoading());
+    try {
+      final user = await _repo.resetPassword(
+        mobile: event.mobile,
+        newPassword: event.newPassword,
       );
       emit(AuthAuthenticated(user));
     } catch (e) {

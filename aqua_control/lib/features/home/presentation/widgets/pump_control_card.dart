@@ -55,7 +55,8 @@ class PumpControlCard extends StatelessWidget {
                   percent: status.overheadPercent, label: 'OVERHEAD'),
               Expanded(
                 child: Column(children: [
-                  GestureDetector(
+                  _GearButton(
+                    color: c.primary,
                     onTap: () => ThresholdSettingsSheet.show(
                       context,
                       overcurrent: status.overcurrent,
@@ -63,7 +64,6 @@ class PumpControlCard extends StatelessWidget {
                       onSave: (oc, uc) => context.read<HomeBloc>().add(
                           SetThresholds(overcurrent: oc, undercurrent: uc)),
                     ),
-                    child: Icon(Icons.settings, color: c.primary, size: 36),
                   ),
                 ]),
               ),
@@ -140,6 +140,84 @@ class PumpControlCard extends StatelessWidget {
         MotorMode.auto => 'Auto\nMode',
         MotorMode.schedule => 'Schedule',
       };
+}
+
+/// Gear icon that visibly reads as tappable: a soft circular badge with
+/// ripple feedback, a slow idle "breathing" pulse to draw the eye, and a
+/// bouncy spin on tap so pressing it feels like it actually did something.
+class _GearButton extends StatefulWidget {
+  final Color color;
+  final VoidCallback onTap;
+  const _GearButton({required this.color, required this.onTap});
+
+  @override
+  State<_GearButton> createState() => _GearButtonState();
+}
+
+class _GearButtonState extends State<_GearButton>
+    with TickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulse;
+  late final AnimationController _spinCtrl;
+  late final Animation<double> _spin;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+
+    _spinCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 450),
+    );
+    _spin = Tween<double>(begin: 0.0, end: 0.5).animate(
+      CurvedAnimation(parent: _spinCtrl, curve: Curves.easeOutBack),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    _spinCtrl.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    _spinCtrl.forward(from: 0);
+    widget.onTap();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_pulseCtrl, _spinCtrl]),
+      builder: (context, child) => Transform.scale(
+        scale: _pulse.value,
+        child: Transform.rotate(
+          angle: _spin.value * 6.28319,
+          child: child,
+        ),
+      ),
+      child: Material(
+        color: widget.color.withValues(alpha: 0.14),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: _handleTap,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(Icons.settings, color: widget.color, size: 26),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ModeChip extends StatelessWidget {

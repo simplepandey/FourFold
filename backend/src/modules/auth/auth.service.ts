@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { VerifyOtpTokenDto } from './dto/verify-otp-token.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SocietyLoginDto } from '../societies/dto/society-login.dto';
 import { OtpService } from '../otp/otp.service';
 import { UsersService } from '../users/users.service';
@@ -78,9 +79,7 @@ export class AuthService {
     };
   }
 
-  async verifyOtpToken(dto: VerifyOtpTokenDto) {
-    const { accessToken, phoneNumber } = dto;
-
+  private async _verifyMsg91AccessToken(accessToken: string): Promise<void> {
     const widgetAuthKey = this.configService.get<string>('sms.msg91.widgetAuthKey');
     const res = await fetch('https://control.msg91.com/api/v5/widget/verifyAccessToken', {
       method: 'POST',
@@ -92,6 +91,12 @@ export class AuthService {
     if (msg91.type !== 'success') {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
+  }
+
+  async verifyOtpToken(dto: VerifyOtpTokenDto) {
+    const { accessToken, phoneNumber } = dto;
+
+    await this._verifyMsg91AccessToken(accessToken);
 
     let user = await this.usersService.findByPhoneNumber(phoneNumber);
     if (!user) {
@@ -177,6 +182,41 @@ export class AuthService {
           societyName: society.societyName,
           blockOrWing: society.blockOrWing,
           totalMembers: society.totalMembers,
+        },
+        token,
+      },
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const { accessToken, phoneNumber, newPassword } = dto;
+
+    await this._verifyMsg91AccessToken(accessToken);
+
+    const user = await this.usersService.findByPhoneNumber(phoneNumber);
+    if (!user) {
+      throw new UnauthorizedException('No account found for this phone number');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.usersService.setPassword(user.id, hashedPassword);
+
+    const payload: JwtPayload = { sub: user.id, phoneNumber: user.phoneNumber, type: 'user' };
+    const token = this.jwtService.sign(payload);
+    const societyInfo = await this._resolveSociety(user.id);
+
+    this.logger.log(`Password reset for ${phoneNumber}`);
+
+    return {
+      success: true,
+      message: 'Password reset successfully',
+      data: {
+        user: {
+          id: user.id,
+          phoneNumber: user.phoneNumber,
+          name: user.name,
+          isVerified: user.isVerified,
+          ...societyInfo,
         },
         token,
       },

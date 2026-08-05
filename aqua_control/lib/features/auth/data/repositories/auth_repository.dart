@@ -13,6 +13,9 @@ class AuthRepository {
   // Stored between sendOtp and verifyOtp SDK calls
   String? _reqId;
 
+  // Stored between verifyForgotPasswordOtp and resetPassword
+  String? _resetAccessToken;
+
   AuthRepository() {
     _dio = Dio(BaseOptions(
       baseUrl: AppConfig.baseUrl,
@@ -123,6 +126,60 @@ class AuthRepository {
     });
     final data = res.data['data'] as Map<String, dynamic>;
     await _storage.write(key: 'auth_token', value: data['token'] as String);
+  }
+
+  // ─── Forgot password: OTP via MSG91 widget SDK ───────────
+  Future<void> sendForgotPasswordOtp(String mobile) async {
+    if (AppConfig.useMock) {
+      await Future.delayed(const Duration(milliseconds: 800));
+      return;
+    }
+    final response = await OTPWidget.sendOTP({'identifier': _toMsg91(mobile)});
+    final map = response as Map<dynamic, dynamic>;
+    if (map['type'] != 'success') {
+      throw Exception(map['message']?.toString() ?? 'Failed to send OTP');
+    }
+    _reqId = map['message']?.toString();
+  }
+
+  Future<void> verifyForgotPasswordOtp({
+    required String mobile,
+    required String otp,
+  }) async {
+    if (AppConfig.useMock) {
+      await Future.delayed(const Duration(seconds: 1));
+      _resetAccessToken = 'mock_access_token';
+      return;
+    }
+    _resetAccessToken = await _verifyWithSdk(otp);
+  }
+
+  // POST /auth/reset-password — verifies stored accessToken, rehashes
+  // password, and returns a brand-new session (JWT + user)
+  Future<UserModel> resetPassword({
+    required String mobile,
+    required String newPassword,
+  }) async {
+    if (AppConfig.useMock) {
+      await Future.delayed(const Duration(seconds: 1));
+      _resetAccessToken = null;
+      await _saveSession('mock_jwt_${_mockUser.id}', _mockUser);
+      return _mockUser;
+    }
+    final accessToken = _resetAccessToken;
+    if (accessToken == null) {
+      throw Exception('OTP not verified. Please verify OTP again.');
+    }
+    final res = await _dio.post(AppConfig.resetPassword, data: {
+      'accessToken': accessToken,
+      'phoneNumber': _toE164(mobile),
+      'newPassword': newPassword,
+    });
+    final data = res.data['data'] as Map<String, dynamic>;
+    final user = UserModel.fromUserJson(data['user'] as Map<String, dynamic>);
+    await _saveSession(data['token'] as String, user);
+    _resetAccessToken = null;
+    return user;
   }
 
   // POST /societies

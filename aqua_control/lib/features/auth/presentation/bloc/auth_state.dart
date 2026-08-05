@@ -35,6 +35,24 @@ class AuthUnauthenticated extends AuthState {
   const AuthUnauthenticated();
 }
 
+// ─── Forgot password states ────────────────────────────────────
+
+/// OTP sent to mobile — show OTP input step
+class ForgotPasswordOtpSent extends AuthState {
+  final String mobile;
+  const ForgotPasswordOtpSent(this.mobile);
+  @override
+  List<Object?> get props => [mobile];
+}
+
+/// OTP verified — show new-password step
+class ForgotPasswordOtpVerified extends AuthState {
+  final String mobile;
+  const ForgotPasswordOtpVerified(this.mobile);
+  @override
+  List<Object?> get props => [mobile];
+}
+
 // ─── Registration states ──────────────────────────────────────
 
 /// OTP sent to mobile — show OTP input step

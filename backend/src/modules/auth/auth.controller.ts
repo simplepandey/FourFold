@@ -11,6 +11,7 @@ import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { VerifyOtpTokenDto } from './dto/verify-otp-token.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SocietyLoginDto } from '../societies/dto/society-login.dto';
 import { Public } from '../../common/decorators/public.decorator';
 
@@ -118,5 +119,31 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'Invalid phone number or password' })
   async societyLogin(@Body() societyLoginDto: SocietyLoginDto) {
     return this.authService.societyLogin(societyLoginDto);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Reset password after OTP verification — returns a fresh JWT',
+    description:
+      'Client verifies OTP via the MSG91 widget (forgot-password flow) and sends the resulting access token here along with a new password. The server re-verifies the token with MSG91, rehashes and stores the new password, then returns a new JWT session.',
+  })
+  @ApiBody({ type: ResetPasswordDto })
+  @ApiOkResponse({
+    description: 'Password reset — new JWT session returned',
+    schema: {
+      example: {
+        success: true,
+        message: 'Password reset successfully',
+        data: {
+          user: { id: 'uuid', phoneNumber: '+919876543210', name: null, isVerified: true },
+          token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+        },
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid/expired OTP token or no account for this phone number' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 }
