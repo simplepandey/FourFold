@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:sendotp_flutter_sdk/sendotp_flutter_sdk.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/otp_widget/otp_widget.dart';
 import '../models/user_model.dart';
 
 class AuthRepository {

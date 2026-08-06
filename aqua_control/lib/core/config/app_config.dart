@@ -16,7 +16,7 @@ abstract class _EnvConfig {
 
 class _LocalConfig extends _EnvConfig {
   @override
-  String get baseUrl => 'http://192.168.1.12:3000/api/v1';
+  String get baseUrl => 'http://172.20.10.2:3000/api/v1';
   @override
   String get userLogin => '/auth/user-login';
   @override
