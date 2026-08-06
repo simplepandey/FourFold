@@ -34,7 +34,7 @@ export class DeviceRepository {
 
   async findBySerialNumber(serialNumber: string): Promise<EspRegistration[]> {
     return this.prisma.espRegistration.findMany({
-      where: { serialNumber },
+      where: { serialNumber: { equals: serialNumber, mode: 'insensitive' } },
       orderBy: { createdAt: 'desc' },
     });
   }

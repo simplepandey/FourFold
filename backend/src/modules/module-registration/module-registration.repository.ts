@@ -25,7 +25,7 @@ export class ModuleRegistrationRepository {
 
   async findActiveBySerialNumber(serialNumber: string): Promise<ModuleRegistration | null> {
     return this.prisma.moduleRegistration.findFirst({
-      where: { serialNumber, isDeleted: false },
+      where: { serialNumber: { equals: serialNumber, mode: 'insensitive' }, isDeleted: false },
     });
   }
 

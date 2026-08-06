@@ -82,7 +82,7 @@ export class DeviceService {
     if (!records || records.length === 0) {
       throw new NotFoundException(`Device with serial number '${serialNumber}' not found`);
     }
-    return true;
+    return records;
   }
 
   async findByUserId(userId: string) {

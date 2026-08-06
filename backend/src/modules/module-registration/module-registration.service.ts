@@ -16,17 +16,22 @@ export class ModuleRegistrationService {
   ) {}
 
   async create(dto: CreateModuleRegistrationDto) {
-    // 1. Verify the ESP is registered (throws NotFoundException if not)
-    await this.deviceService.findBySerialNumber(dto.serialNumber);
+    // 1. Verify the ESP is registered (throws NotFoundException if not), matched
+    // case-insensitively so "sr12345" and "SR12345" resolve to the same device.
+    const [esp] = await this.deviceService.findBySerialNumber(dto.serialNumber);
+    // Use the ESP's originally-registered casing everywhere below, so this
+    // registration stays joinable with EspRegistration regardless of how the
+    // user typed the serial number.
+    const serialNumber = esp.serialNumber;
 
     // 2. Prevent duplicate active registration
-    const existing = await this.repository.findActiveBySerialNumber(dto.serialNumber);
+    const existing = await this.repository.findActiveBySerialNumber(serialNumber);
     if (existing) {
-      throw new ConflictException(`Module '${dto.serialNumber}' is already registered`);
+      throw new ConflictException(`Module '${serialNumber}' is already registered`);
     }
 
     const registration = await this.repository.create({
-      serialNumber: dto.serialNumber,
+      serialNumber,
       registeredTo: dto.societyCode,
       noOfPump: dto.noOfPump,
       phase: dto.phase,
@@ -45,12 +50,12 @@ export class ModuleRegistrationService {
       await this.societiesRepository.updateMemberSerialNumber(
         dto.societyCode,
         dto.userId,
-        dto.serialNumber,
+        serialNumber,
       );
     }
 
     await this.moduleStatusService.upsert({
-      serialNumber: dto.serialNumber,
+      serialNumber,
       updatedBy: dto.createdBy,
     });
 
