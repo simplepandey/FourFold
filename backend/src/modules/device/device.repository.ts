@@ -1,10 +1,33 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { EspRegistration } from '@prisma/client';
+import { EspRegistration, Topic } from '@prisma/client';
+
+type EspWithTopics = EspRegistration & { topics: Topic };
+
+// Pre-refactor EspRegistration shape (topics were flat columns on this table).
+// Endpoints that serialize records directly (not through DeviceService.format()/
+// getInfo()) must keep returning exactly this shape.
+type FlatEspRegistration = Omit<EspRegistration, 'topicsId'> & {
+  commandTopic: string;
+  telemetryTopic: string;
+  alertTopic: string;
+  heartbeatTopic: string;
+};
 
 @Injectable()
 export class DeviceRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  private flatten(r: EspWithTopics): FlatEspRegistration {
+    const { topics, topicsId: _topicsId, ...rest } = r;
+    return {
+      ...rest,
+      commandTopic: topics.commandTopic,
+      telemetryTopic: topics.telemetryTopic,
+      alertTopic: topics.alertTopic,
+      heartbeatTopic: topics.heartbeatTopic,
+    };
+  }
 
   async create(data: {
     serialNumber: string;
@@ -17,33 +40,50 @@ export class DeviceRepository {
     telemetryTopic: string;
     alertTopic: string;
     heartbeatTopic: string;
-  }): Promise<EspRegistration> {
-    return this.prisma.espRegistration.create({ data });
+  }): Promise<EspWithTopics> {
+    const { commandTopic, telemetryTopic, alertTopic, heartbeatTopic, ...rest } = data;
+    return this.prisma.espRegistration.create({
+      data: {
+        ...rest,
+        topics: {
+          create: { commandTopic, telemetryTopic, alertTopic, heartbeatTopic },
+        },
+      },
+      include: { topics: true },
+    });
   }
 
-  async findAll(): Promise<EspRegistration[]> {
-    return this.prisma.espRegistration.findMany({ orderBy: { createdAt: 'asc' } });
+  async findAll(): Promise<EspWithTopics[]> {
+    return this.prisma.espRegistration.findMany({
+      orderBy: { createdAt: 'asc' },
+      include: { topics: true },
+    });
   }
 
-  async findOneBySerialNumber(serialNumber: string): Promise<EspRegistration | null> {
+  async findOneBySerialNumber(serialNumber: string): Promise<EspWithTopics | null> {
     return this.prisma.espRegistration.findFirst({
       where: { serialNumber },
       orderBy: { createdAt: 'desc' },
+      include: { topics: true },
     });
   }
 
-  async findBySerialNumber(serialNumber: string): Promise<EspRegistration[]> {
-    return this.prisma.espRegistration.findMany({
+  async findBySerialNumber(serialNumber: string): Promise<FlatEspRegistration[]> {
+    const records = await this.prisma.espRegistration.findMany({
       where: { serialNumber: { equals: serialNumber, mode: 'insensitive' } },
       orderBy: { createdAt: 'desc' },
+      include: { topics: true },
     });
+    return records.map((r) => this.flatten(r));
   }
 
-  async findByUserId(userId: string): Promise<EspRegistration[]> {
-    return this.prisma.espRegistration.findMany({
+  async findByUserId(userId: string): Promise<FlatEspRegistration[]> {
+    const records = await this.prisma.espRegistration.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
+      include: { topics: true },
     });
+    return records.map((r) => this.flatten(r));
   }
 
   async findModulesByUserId(userId: string) {
@@ -79,6 +119,7 @@ export class DeviceRepository {
       this.prisma.espRegistration.findFirst({
         where: { serialNumber },
         orderBy: { createdAt: 'desc' },
+        include: { topics: true },
       }),
       this.prisma.moduleRegistration.findFirst({
         where: { serialNumber, isDeleted: false },

@@ -119,22 +119,34 @@ model MotorCommand {
 }
 
 model EspRegistration {
+  id           String   @id @default(uuid())
+  serialNumber String
+  serialHash   String
+  type         String?
+  username     String?
+  userId       String?
+  societyId    String?
+  topicsId     String   @unique
+  createdAt    DateTime @default(now())
+
+  topics Topic @relation(fields: [topicsId], references: [id])
+
+  @@index([serialNumber])
+  @@index([serialHash])
+  @@map("esp_registrations")
+}
+
+model Topic {
   id             String   @id @default(uuid())
-  serialNumber   String
-  serialHash     String
-  type           String?
-  username       String?
-  userId         String?
-  societyId      String?
   commandTopic   String
   telemetryTopic String
   alertTopic     String
   heartbeatTopic String
   createdAt      DateTime @default(now())
 
-  @@index([serialNumber])
-  @@index([serialHash])
-  @@map("esp_registrations")
+  esp EspRegistration?
+
+  @@map("topics")
 }
 
 model MotorTelemetry {

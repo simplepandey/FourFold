@@ -13,12 +13,7 @@ export class DeviceService {
   async register(serialNumber: string, type?: string): Promise<{ data: object; created: boolean }> {
     const existing = await this.repository.findOneBySerialNumber(serialNumber);
     if (existing) {
-      this.topicCache.set(existing.serialNumber, {
-        commandTopic: existing.commandTopic,
-        telemetryTopic: existing.telemetryTopic,
-        alertTopic: existing.alertTopic,
-        heartbeatTopic: existing.heartbeatTopic,
-      });
+      this.topicCache.set(existing.serialNumber, existing.topics);
       return { data: this.format(existing), created: false };
     }
 
@@ -35,12 +30,7 @@ export class DeviceService {
       heartbeatTopic: `${base}/heartbeat`,
     });
 
-    this.topicCache.set(registration.serialNumber, {
-      commandTopic: registration.commandTopic,
-      telemetryTopic: registration.telemetryTopic,
-      alertTopic: registration.alertTopic,
-      heartbeatTopic: registration.heartbeatTopic,
-    });
+    this.topicCache.set(registration.serialNumber, registration.topics);
 
     return { data: this.format(registration), created: true };
   }
@@ -53,10 +43,12 @@ export class DeviceService {
     username: string | null;
     userId: string | null;
     societyId: string | null;
-    commandTopic: string;
-    telemetryTopic: string;
-    alertTopic: string;
-    heartbeatTopic: string;
+    topics: {
+      commandTopic: string;
+      telemetryTopic: string;
+      alertTopic: string;
+      heartbeatTopic: string;
+    };
     createdAt: Date;
   }) {
     return {
@@ -68,10 +60,10 @@ export class DeviceService {
       userId: r.userId,
       societyId: r.societyId,
       topics: {
-        commands: r.commandTopic,
-        telemetry: r.telemetryTopic,
-        alert: r.alertTopic,
-        heartbeat: r.heartbeatTopic,
+        commands: r.topics.commandTopic,
+        telemetry: r.topics.telemetryTopic,
+        alert: r.topics.alertTopic,
+        heartbeat: r.topics.heartbeatTopic,
       },
       createdAt: r.createdAt,
     };
@@ -107,10 +99,10 @@ export class DeviceService {
             serialNumber: esp.serialNumber,
             serialHash: esp.serialHash,
             topics: {
-              commands: esp.commandTopic,
-              telemetry: esp.telemetryTopic,
-              alert: esp.alertTopic,
-              heartbeat: esp.heartbeatTopic,
+              commands: esp.topics.commandTopic,
+              telemetry: esp.topics.telemetryTopic,
+              alert: esp.topics.alertTopic,
+              heartbeat: esp.topics.heartbeatTopic,
             },
             createdAt: esp.createdAt,
           }

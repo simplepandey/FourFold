@@ -23,12 +23,7 @@ export class EspTopicCacheService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     const registrations = await this.repository.findAll();
     for (const r of registrations) {
-      this.cache.set(r.serialNumber, {
-        commandTopic: r.commandTopic,
-        telemetryTopic: r.telemetryTopic,
-        alertTopic: r.alertTopic,
-        heartbeatTopic: r.heartbeatTopic,
-      });
+      this.cache.set(r.serialNumber, r.topics);
     }
     this.logger.log(`Cached MQTT topics for ${this.cache.size} device(s)`);
   }
@@ -44,12 +39,7 @@ export class EspTopicCacheService implements OnModuleInit {
       throw new NotFoundException(`No ESP registration found for serial number '${serialNumber}'`);
     }
 
-    const topics: EspTopics = {
-      commandTopic: registration.commandTopic,
-      telemetryTopic: registration.telemetryTopic,
-      alertTopic: registration.alertTopic,
-      heartbeatTopic: registration.heartbeatTopic,
-    };
+    const topics = registration.topics;
     this.cache.set(serialNumber, topics);
     return topics;
   }

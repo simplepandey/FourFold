@@ -358,7 +358,112 @@ cd backend
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-If the schema changed, also re-run Step 13 (`prisma db push`) from your laptop.
+If the schema only *added* something (a new nullable column, a new table with
+no data to move), re-running Step 13 (`prisma db push`) from your laptop is
+still fine. **If the schema change moves or drops existing columns — like the
+`topics` table extraction — do NOT use `db push`.** `db push` just diffs and
+applies directly; for that kind of change it means an instant `DROP COLUMN`
+with no backfill, so whatever data was in those columns is gone. Use the
+migration procedure below instead.
+
+---
+
+# DEPLOYING A DATA-MIGRATING SCHEMA CHANGE (e.g. the `topics` table)
+
+This applies whenever a migration under `backend/prisma/migrations/` does more
+than add a column — anything that moves data between tables (like extracting
+`commandTopic`/`telemetryTopic`/`alertTopic`/`heartbeatTopic` off
+`EspRegistration` into a new `topics` table) needs this procedure, not `db
+push`, so existing rows keep their data.
+
+## Step 1 — Back Up the Database First
+
+Non-negotiable before touching a production schema. From your laptop (wherever
+`DATABASE_URL` is already reachable, same place Step 13 works from):
+
+```bash
+pg_dump "postgresql://fourfold_app:YOUR_DB_PASSWORD@YOUR_DB_SERVER_IP:5432/fourfold_db" \
+  -F c -f fourfold_db_backup_$(date +%Y%m%d%H%M%S).dump
+```
+
+If this fails because `pg_dump` isn't installed locally: `brew install postgresql@16` (macOS) gets you the client tools without a full server install.
+
+## Step 2 — Push the Code (from your laptop)
+
+```bash
+cd /Users/simplepandey/Documents/claude_project/FourFold
+git add backend/prisma backend/src backend/.gitignore
+git commit -m "Extract ESP MQTT topics into their own table"
+git push
+```
+
+## Step 3 — Pull and Pre-Build on the Server (don't cut over yet)
+
+```bash
+ssh root@YOUR_API_SERVER_IP
+cd /opt/fourfold/FourFold/backend
+git pull
+docker compose -f docker-compose.prod.yml build   # build only — old container keeps serving traffic
+```
+
+## Step 4 — Baseline the Existing Migrations (one-time only)
+
+Production has only ever used `db push`, so — same as the local dev DB before
+this change — there's no `_prisma_migrations` history table yet. Skip this
+step on any future migration once this has been done once.
+
+From your laptop:
+
+```bash
+cd backend
+DATABASE_URL="postgresql://fourfold_app:YOUR_DB_PASSWORD@YOUR_DB_SERVER_IP:5432/fourfold_db" \
+  npx prisma migrate resolve --applied 20260520161135_init
+
+DATABASE_URL="postgresql://fourfold_app:YOUR_DB_PASSWORD@YOUR_DB_SERVER_IP:5432/fourfold_db" \
+  npx prisma migrate resolve --applied 20260520164822_add_societies
+```
+
+(If your laptop can't reach the DB port directly, run these same two commands
+over SSH on the API server instead, using a container built from the
+`development` Dockerfile stage — that stage has the full `prisma` CLI that
+the slim production image intentionally omits.)
+
+## Step 5 — Apply the Migration
+
+```bash
+DATABASE_URL="postgresql://fourfold_app:YOUR_DB_PASSWORD@YOUR_DB_SERVER_IP:5432/fourfold_db" \
+  npx prisma migrate deploy
+```
+
+Expected: `Applying migration 20260810191857_add_topics_table` → `All
+migrations have been successfully applied.` This is the same
+backfill-then-drop SQL already verified against the local dev DB — it copies
+each existing row's 4 topic values into the new `topics` table (reusing the
+`esp_registrations` row's own `id` as the topic's `id`) before dropping the
+old columns, so nothing is lost.
+
+## Step 6 — Cut Over Immediately
+
+The old container is still running against the now-migrated DB at this point
+— its bundled Prisma Client doesn't know the old columns are gone, so any
+device/topic query will error until this step finishes. Since the image was
+already built in Step 3, this is just a fast restart, not a rebuild:
+
+```bash
+# back on the server
+docker compose -f docker-compose.prod.yml up -d
+```
+
+## Step 7 — Verify
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f api   # no Prisma errors on boot
+curl https://api.fourfoldsystem.com/api/v1/device/register/<a real serial number>
+```
+
+Confirm the response still has the same `topics: { commands, telemetry,
+alert, heartbeat }` shape as before — the API payload was deliberately kept
+unchanged even though the DB structure moved.
 
 ---
 
