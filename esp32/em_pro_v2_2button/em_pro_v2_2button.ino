@@ -7,6 +7,7 @@
   #include <EEPROM.h>
   #include <esp_task_wdt.h>
   #include <string.h>
+  #include <math.h>
   #include <WiFi.h>
   #include <WiFiClientSecure.h>
   #include <HTTPClient.h>
@@ -81,6 +82,7 @@
   #define MQTT_USERNAME            "fourfold"
   #define MQTT_PASSWORD            "fourfold@2026"
   #define TELEMETRY_FIRST_SEND_MS  120000UL
+  #define MQTT_RECONNECT_INTERVAL_MS 5000UL
 
   // Uncomment to skip BLE provisioning on boot and connect straight to
   // Wokwi's simulated open network, for bench-testing the WiFi/HTTP/EEPROM
@@ -127,10 +129,18 @@
   BLECharacteristic* bleStatusChar = nullptr;
   volatile bool bleSsidReceived = false;
   volatile bool blePassReceived = false;
+  volatile bool bleClientConnected = false;
   char bleSsidBuf[33];
   char blePassBuf[65];
 
   bool telemetrySent = false;
+
+  // Persistent MQTT client - subscribed to the commands topic and reused
+  // for telemetry/heartbeat publishes, instead of the old connect-per-publish
+  // approach. Kept alive from loop() via maintainMqtt().
+  WiFiClient mqttNetClient;
+  PubSubClient mqttClient(mqttNetClient);
+  unsigned long lastMqttReconnectAttempt = 0;
 
   enum ButtonCode {
     BTN_DIGIT1 = 1, BTN_DIGIT2 = 2, BTN_DIGIT3 = 3, BTN_DIGIT4 = 4,
@@ -162,6 +172,21 @@
 
   int res = 0;
   int res3 = 0;
+  // Sub-decigap-resolution current. res/OC/UC/calib.ocValue/calib.ucValue are
+  // all real amps x10 internally (confirmed by the display: Show_Current()'s
+  // print(D2, D3+10, D4, 25) ORs the decimal-point segment onto D3, rendering
+  // res as "D2 D3.D4" i.e. res/10). resPrecise carries that same x10 scale
+  // without the truncation res's int cast applies.
+  float resPrecise = 0;
+
+  // Event-driven telemetry tracking - see reportMotorState()/reportCurrentIfChanged().
+  // Stored in true amps (not the internal x10 scale) since that's the unit
+  // CURRENT_TELEMETRY_DELTA_A is expressed in, and what MQTT payloads use.
+  int lastReportedMotorState = -1;       // -1 = not yet reported, 0 = off, 1 = on
+  float lastReportedCurrentAmps = -1.0f; // negative = not yet reported (real current is never negative)
+  unsigned long lastCurrentTelemetryMs = 0;
+  #define CURRENT_TELEMETRY_DELTA_A         0.5f
+  #define CURRENT_TELEMETRY_MIN_INTERVAL_MS 2000UL
 
   int  currentDigit       = 1; 
   bool digitBlinkVisible  = true;
@@ -190,12 +215,10 @@
     pinMode(PIN_CURRENT_ADC, INPUT);
     pinMode(PIN_VOLTAGE_ADC, INPUT);
 
-    esp_task_wdt_config_t wdtConfig = {
-      .timeout_ms = WDT_TIMEOUT_S * 1000,
-      .idle_core_mask = 0,
-      .trigger_panic = true
-    };
-    esp_task_wdt_init(&wdtConfig);
+    // esp_task_wdt_init(uint32_t timeout_s, bool panic) - the older,
+    // pre-ESP-IDF-5 signature (esp32 Arduino core <3.0, e.g. 2.0.7). The
+    // esp_task_wdt_config_t struct-based overload only exists in core 3.x.
+    esp_task_wdt_init(WDT_TIMEOUT_S, true);
     esp_task_wdt_add(NULL);
 
     setupNetworking();
@@ -212,6 +235,8 @@
       telemetrySent = true;
       sendTelemetry();
     }
+
+    maintainMqtt();
 
     keypad.setDebounceTime(KEYPAD_DEBOUNCE_MS);
     precesskey();
@@ -245,6 +270,7 @@
     print(20, 21, 22, 22);
     M1 = M2 = 0;
     PBN = BTN_OFF;
+    reportMotorState(false);
   }
 
   void turn_on() {
@@ -253,7 +279,34 @@
     Relay(1);
     M1 = M2 = 0;
     PBN = BTN_ON;
+    reportMotorState(true);
+    reportCurrentIfChanged();
     compare();
+  }
+
+  // Sends telemetry exactly once per motor on/off transition, not on every
+  // loop() tick - turn_on()/turn_off() run every tick while in that state,
+  // so without this dedupe they'd spam a telemetry publish every cycle.
+  void reportMotorState(bool isOn) {
+    int state = isOn ? 1 : 0;
+    if (state == lastReportedMotorState) return;
+    lastReportedMotorState = state;
+    if (!isOn) lastReportedCurrentAmps = -1.0f; // fresh baseline for the next run
+    sendTelemetry();
+  }
+
+  // Sends telemetry when load current has moved by CURRENT_TELEMETRY_DELTA_A
+  // (0.5A) or more since the last report, rate-limited so noisy/fluctuating
+  // current can't flood MQTT with a publish every ~25ms sample cycle.
+  void reportCurrentIfChanged() {
+    float trueAmps = resPrecise / 10.0f; // resPrecise is on the internal x10 scale
+    if (fabs(trueAmps - lastReportedCurrentAmps) < CURRENT_TELEMETRY_DELTA_A) return;
+
+    unsigned long now = millis();
+    if (now - lastCurrentTelemetryMs < CURRENT_TELEMETRY_MIN_INTERVAL_MS) return;
+    lastCurrentTelemetryMs = now;
+    lastReportedCurrentAmps = trueAmps;
+    sendTelemetry();
   }
 //---------------------------------
 
@@ -460,6 +513,8 @@
         Relay(0);
         delay(20);
         button_num = BTN_OC_FAULT;
+        sendAlert(true, false);
+        reportMotorState(false); // relay tripped outside turn_off(), so report it here
       }
     } else if (res < UC) {
       unsigned long waitTime = (res == 0) ? UC_RECHECK_NO_LOAD_MS : UC_RECHECK_MS;
@@ -474,13 +529,24 @@
         Relay(0);
         delay(20);
         button_num = BTN_UC_FAULT;
+        sendAlert(false, true);
+        reportMotorState(false);
       }
     }
   }
 //---------------------------------
 
 //----------Show Functions---------
-  void Show_Current() {
+  // Overload (not a default arg - Arduino's auto-generated prototype would
+  // duplicate a default value onto both the prototype and the definition,
+  // which G++ rejects as a redefinition) so existing no-arg call sites are
+  // untouched.
+  void Show_Current() { Show_Current(true); }
+
+  // updateDisplay=false lets background sampling (telemetry/heartbeat) read
+  // a fresh current value without flickering the display over whatever
+  // screen is currently showing - see sampleElectricalReadings().
+  void Show_Current(bool updateDisplay) {
     static unsigned long lastSampleTime = 0;
     static long sum = 0;
     static int sampleCount = 0;
@@ -499,16 +565,20 @@
       // Piecewise scaling to real-world current. Gap between 660-750
       // in v1.0 fell through with no match, leaving res stale - fixed
       // by covering the full range explicitly.
-          if (averaged_value <= 45)                             res = averaged_value * 0.30;
-      else if (averaged_value <= 120)                             res = averaged_value * 0.16;
-      else if (averaged_value <= 230)                             res = averaged_value * 0.10;
-      else if (averaged_value <= 390)                             res = averaged_value * 0.076;
-      else if (averaged_value <= 510)                             res = averaged_value * 0.068;
-      else if (averaged_value <= 660)                             res = averaged_value * 0.06;
-      else if (averaged_value <= 750)                             res = averaged_value * 0.058; // fills the gap
-      else if (averaged_value <= 1300)                            res = averaged_value * 0.054;
-      else if (averaged_value <= 2750)                            res = averaged_value * 0.048;
-      else                                                        res = averaged_value * 0.05;
+      float scaled;
+          if (averaged_value <= 45)                             scaled = averaged_value * 0.30;
+      else if (averaged_value <= 120)                             scaled = averaged_value * 0.16;
+      else if (averaged_value <= 230)                             scaled = averaged_value * 0.10;
+      else if (averaged_value <= 390)                             scaled = averaged_value * 0.076;
+      else if (averaged_value <= 510)                             scaled = averaged_value * 0.068;
+      else if (averaged_value <= 660)                             scaled = averaged_value * 0.06;
+      else if (averaged_value <= 750)                             scaled = averaged_value * 0.058; // fills the gap
+      else if (averaged_value <= 1300)                            scaled = averaged_value * 0.054;
+      else if (averaged_value <= 2750)                            scaled = averaged_value * 0.048;
+      else                                                        scaled = averaged_value * 0.05;
+
+      resPrecise = scaled;
+      res = (int)scaled;
 
       D1 = res / 1000 % 10;
       D2 = res / 100  % 10;
@@ -518,7 +588,7 @@
       SC = (res >= 200) ? 1 : 0;
     }
 
-    print(D2, D3 + 10, D4, 25);
+    if (updateDisplay) print(D2, D3 + 10, D4, 25);
   }
 
   void Show_Voltage(int show) {
@@ -870,12 +940,30 @@
     }
   };
 
+  // Tracks whether a phone is currently connected to the GATT server, so
+  // runBleProvisioning() can tell "nobody's connected yet" (keep waiting)
+  // apart from "was connected, now isn't" (the phone gave up - stop).
+  class BleServerConnectionCallback : public BLEServerCallbacks {
+    void onConnect(BLEServer* server) override { bleClientConnected = true; }
+    void onDisconnect(BLEServer* server) override { bleClientConnected = false; }
+  };
+
   // Advertises the BLE GATT service aqua_control's WiFi provisioning flow
-  // expects, and waits up to timeoutMs for both the SSID and password
-  // characteristics to be written. Returns true only if both arrived in time.
+  // expects, and retries WiFi connection attempts as credentials arrive,
+  // all within a single timeoutMs budget. ESP32 supports WiFi/BLE running
+  // concurrently (the radio is time-shared via ESP-IDF's coexistence
+  // support - the same pattern Espressif's own BLE provisioning example
+  // uses), so BLE is left connected through each connectToWifi() attempt:
+  // the phone hears "connecting...", then "connected"/"failed" over the
+  // same session, and on failure can just write a new SSID/password
+  // without reconnecting. Returns true (with netData.ssid/password/
+  // wifiValid already saved) only once a connectToWifi() attempt actually
+  // succeeds; false if the budget runs out or the phone disconnects
+  // without ever succeeding.
   bool runBleProvisioning(unsigned long timeoutMs) {
     bleSsidReceived = false;
     blePassReceived = false;
+    bleClientConnected = false;
     memset(bleSsidBuf, 0, sizeof(bleSsidBuf));
     memset(blePassBuf, 0, sizeof(blePassBuf));
 
@@ -884,6 +972,7 @@
     BLEDevice::init(bleName.c_str());
 
     BLEServer* server = BLEDevice::createServer();
+    server->setCallbacks(new BleServerConnectionCallback());
     BLEService* service = server->createService(BLE_SERVICE_UUID);
 
     BLECharacteristic* ssidChar = service->createCharacteristic(
@@ -904,18 +993,51 @@
     advertising->setScanResponse(true);
     BLEDevice::startAdvertising();
 
-    unsigned long start = millis();
-    bool gotBoth = false;
-    while (millis() - start < timeoutMs) {
+    unsigned long deadline = millis() + timeoutMs;
+    bool everConnected = false;
+    bool wifiUp = false;
+
+    while ((long)(deadline - millis()) > 0) {
       esp_task_wdt_reset();
-      if (bleSsidReceived && blePassReceived) { gotBoth = true; break; }
+
+      if (bleClientConnected) everConnected = true;
+      if (everConnected && !bleClientConnected) break; // phone disconnected without a successful attempt
+
+      if (bleSsidReceived && blePassReceived) {
+        strlcpy(netData.ssid, bleSsidBuf, sizeof(netData.ssid));
+        strlcpy(netData.password, blePassBuf, sizeof(netData.password));
+        bleNotifyStatus("Credentials received, connecting to WiFi...");
+
+        long remainingMs = (long)(deadline - millis());
+        unsigned long attemptTimeout = min((unsigned long)WIFI_CONNECT_TIMEOUT_MS,
+                                            (unsigned long)max(remainingMs, 0L));
+        wifiUp = connectToWifi(netData.ssid, netData.password, attemptTimeout);
+
+        if (wifiUp) {
+          netData.wifiValid = true;
+          saveNetworkData();
+          bleNotifyStatus("WiFi connected successfully!");
+          delay(300); // let the notification go out before tearing down BLE
+          break;
+        }
+
+        bleNotifyStatus("WiFi connection failed. Check the password and try again.");
+        WiFi.disconnect(true); // release the STA attempt before the next retry
+        bleSsidReceived = false;
+        blePassReceived = false;
+        memset(bleSsidBuf, 0, sizeof(bleSsidBuf));
+        memset(blePassBuf, 0, sizeof(blePassBuf));
+      }
+
       delay(50);
     }
-    return gotBoth;
+
+    return wifiUp;
   }
 
-  // Frees the BLE radio/stack so it doesn't contend with WiFi - always call
-  // this before connectToWifi(), never while BLE is still active.
+  // Frees the BLE radio/stack once provisioning is done (success, timeout,
+  // or the phone disconnected) - always call this after runBleProvisioning()
+  // returns.
   void stopBleProvisioning() {
     BLEDevice::stopAdvertising();
     bleStatusChar = nullptr;
@@ -960,52 +1082,152 @@
   // Forces a handful of fresh current/voltage samples so res/res3 reflect
   // "now" rather than whatever stale value was last computed - relevant
   // because Show_Current()/Show_Voltage() only average once every 5+ calls.
-  // Note: Show_Current() unconditionally calls print() as a side effect, so
-  // this briefly flickers the display to current-reading digits even if the
-  // motor is off (harmless, matches its existing behavior during normal
-  // ON-state operation - just noting it here since telemetry now triggers
-  // it from a new context).
+  // Both calls pass updateDisplay=false so this background sampling never
+  // touches the display - it must not flicker whatever screen is currently
+  // showing (e.g. the OFF screen) just because telemetry/heartbeat fired.
   void sampleElectricalReadings() {
     for (int i = 0; i < 6; i++) {
-      Show_Current();
+      Show_Current(false);
       Show_Voltage(0);
       delay(6);
     }
   }
 
-  // One-shot telemetry publish. Connects, publishes, disconnects - no
-  // persistent MQTT session is kept, since this only fires once (2 minutes
-  // after boot, see loop()). A persistent client would make more sense if
-  // this becomes a recurring publish or starts handling commands/heartbeat.
+  // Publishes one telemetry snapshot over the persistent mqttClient
+  // (connecting it first if needed). Still only fires once, 2 minutes
+  // after boot (see loop()) - just no longer tears the connection back
+  // down afterward, since mqttClient now stays alive for commands too.
   bool sendTelemetry() {
     if (WiFi.status() != WL_CONNECTED || !netData.topicsValid) return false;
 
     sampleElectricalReadings();
 
+    // res/OC/UC are internally real-amps x10 (see resPrecise's comment) -
+    // the backend/app expect true amps, so divide before sending. Voltage
+    // (res3) has no such scaling - Show_Voltage() never sets the DP segment.
     JsonDocument doc;
     doc["v"] = res3;
-    doc["i"] = res;
-    doc["oc"] = OC;
-    doc["uc"] = UC;
+    doc["i"] = res / 10.0;
+    doc["oc"] = OC / 10.0;
+    doc["uc"] = UC / 10.0;
     doc["motor"] = (digitalRead(PIN_RELAY_MAIN) == HIGH);
     doc["sn"] = getDeviceSerial();
 
     char payload[192];
     size_t len = serializeJson(doc, payload, sizeof(payload));
 
-    WiFiClient netClient;
-    PubSubClient mqtt(netClient);
-    mqtt.setServer(MQTT_BROKER_HOST, MQTT_BROKER_PORT);
-    mqtt.setSocketTimeout(3); // keep well under WDT_TIMEOUT_S so a slow/unreachable broker can't trip the watchdog
+    esp_task_wdt_reset();
+    ensureMqttConnected();
+    if (!mqttClient.connected()) return false;
+
+    bool ok = mqttClient.publish(netData.topicTelemetry, (const uint8_t*)payload, len);
+    esp_task_wdt_reset();
+    return ok;
+  }
+
+  // Keeps mqttClient connected and subscribed to the commands topic,
+  // reconnecting at most once every MQTT_RECONNECT_INTERVAL_MS so an
+  // unreachable broker doesn't turn into a connect() attempt (up to the
+  // 3s socket timeout) on every single loop() tick.
+  void ensureMqttConnected() {
+    if (mqttClient.connected()) return;
+
+    unsigned long now = millis();
+    if (now - lastMqttReconnectAttempt < MQTT_RECONNECT_INTERVAL_MS) return;
+    lastMqttReconnectAttempt = now;
 
     String clientId = "esp32-" + getDeviceSerial();
     esp_task_wdt_reset();
-    if (!mqtt.connect(clientId.c_str(), MQTT_USERNAME, MQTT_PASSWORD)) return false;
-
-    bool ok = mqtt.publish(netData.topicTelemetry, (const uint8_t*)payload, len);
-    mqtt.disconnect();
+    if (mqttClient.connect(clientId.c_str(), MQTT_USERNAME, MQTT_PASSWORD)) {
+      mqttClient.subscribe(netData.topicCommands);
+    }
     esp_task_wdt_reset();
-    return ok;
+  }
+
+  // Services the persistent MQTT connection (reconnect + incoming message
+  // dispatch) every loop() tick. No-op until WiFi and topics are ready.
+  void maintainMqtt() {
+    if (WiFi.status() != WL_CONNECTED || !netData.topicsValid) return;
+    ensureMqttConnected();
+    mqttClient.loop();
+  }
+
+  // Replies to a SEND_HEARTBEAT command on the heartbeat topic, echoing
+  // the request's cmd_id back under the key "id" - that's how the backend
+  // (module-status.service.ts) correlates the reply to its pending request.
+  void sendHeartbeatReply(const char* cmdId) {
+    sampleElectricalReadings();
+
+    // Same x10 -> true-amp conversion as sendTelemetry() - see its comment.
+    JsonDocument doc;
+    doc["id"] = cmdId;
+    doc["v"] = res3;
+    doc["i"] = res / 10.0;
+    doc["oc"] = OC / 10.0;
+    doc["uc"] = UC / 10.0;
+
+    char payload[192];
+    size_t len = serializeJson(doc, payload, sizeof(payload));
+    mqttClient.publish(netData.topicHeartbeat, (const uint8_t*)payload, len);
+  }
+
+  // Publishes an OC/UC breach notice on the alert topic. Matches
+  // telemetry.service.ts's processAlert(): the value's presence (not its
+  // magnitude) is what flags overcurrent_breached/undercurrent_breached, so
+  // any non-null number works - the last current reading is the most useful
+  // one to include. Motor state itself is reported separately via the
+  // reportMotorState(false) telemetry publish the caller also triggers.
+  void sendAlert(bool ocBreached, bool ucBreached) {
+    if (WiFi.status() != WL_CONNECTED || !netData.topicsValid) return;
+
+    float trueAmps = res / 10.0; // same x10 -> true-amp conversion as sendTelemetry()
+    JsonDocument doc;
+    if (ocBreached) doc["overcurrent_breached"] = trueAmps;
+    if (ucBreached) doc["undercurrent_breached"] = trueAmps;
+
+    char payload[128];
+    size_t len = serializeJson(doc, payload, sizeof(payload));
+
+    esp_task_wdt_reset();
+    ensureMqttConnected();
+    if (!mqttClient.connected()) return;
+    mqttClient.publish(netData.topicAlert, (const uint8_t*)payload, len);
+    esp_task_wdt_reset();
+  }
+
+  // Handles commands published by the backend on netData.topicCommands:
+  // {"cmd":"TURN_ON"|"TURN_OFF"|"SET_OC"|"SET_UC"|"SEND_HEARTBEAT","value":<num|null>,"cmd_id":"<uuid>","ts":<unix>}
+  void mqttCommandCallback(char* topic, byte* payload, unsigned int length) {
+    char buf[192];
+    size_t n = min((size_t)length, sizeof(buf) - 1);
+    memcpy(buf, payload, n);
+    buf[n] = '\0';
+
+    JsonDocument doc;
+    if (deserializeJson(doc, buf) != DeserializationError::Ok) return;
+
+    const char* cmd = doc["cmd"] | "";
+    const char* cmdId = doc["cmd_id"] | "";
+
+    if (strcmp(cmd, "TURN_ON") == 0) {
+      button_num = BTN_ON;
+    } else if (strcmp(cmd, "TURN_OFF") == 0) {
+      button_num = BTN_OFF;
+    } else if (strcmp(cmd, "SET_OC") == 0 && !doc["value"].isNull()) {
+      // Backend/app send true amps (e.g. 8.5) - the device stores/compares
+      // real-amps x10 internally (see resPrecise's comment), so convert
+      // and round rather than truncate: 8.5A -> 85, not 8 (which would
+      // display/trip as 0.8A).
+      calib.ocValue = constrain((int)round((float)doc["value"] * 10.0f), 0, 999);
+      saveCalibration();
+      OC = calib.ocValue;
+    } else if (strcmp(cmd, "SET_UC") == 0 && !doc["value"].isNull()) {
+      calib.ucValue = constrain((int)round((float)doc["value"] * 10.0f), 0, 999);
+      saveCalibration();
+      UC = calib.ucValue;
+    } else if (strcmp(cmd, "SEND_HEARTBEAT") == 0) {
+      sendHeartbeatReply(cmdId);
+    }
   }
 
   // Runs once at boot, after the watchdog is armed. Tries stored WiFi
@@ -1017,6 +1239,10 @@
   // state.
   void setupNetworking() {
     loadNetworkData();
+
+    mqttClient.setServer(MQTT_BROKER_HOST, MQTT_BROKER_PORT);
+    mqttClient.setCallback(mqttCommandCallback);
+    mqttClient.setSocketTimeout(3); // keep well under WDT_TIMEOUT_S
 
     #ifdef SIM_WIFI_TEST
       if (!netData.wifiValid) {
@@ -1030,19 +1256,12 @@
                   connectToWifi(netData.ssid, netData.password, WIFI_CONNECT_TIMEOUT_MS);
 
     if (!wifiUp) {
-      bool gotCreds = runBleProvisioning(BLE_PROVISION_TIMEOUT_MS);
-      if (gotCreds) {
-        strlcpy(netData.ssid, bleSsidBuf, sizeof(netData.ssid));
-        strlcpy(netData.password, blePassBuf, sizeof(netData.password));
-        netData.wifiValid = true;
-        saveNetworkData();
-        bleNotifyStatus("Credentials received, connecting to WiFi...");
-        delay(300); // let the notification go out before tearing down BLE
-      }
+      // Advertises, waits for credentials, and retries failed attempts
+      // in-place (BLE stays connected throughout) until success, the
+      // phone disconnects, or BLE_PROVISION_TIMEOUT_MS runs out - see
+      // runBleProvisioning()'s comment. netData is already saved on success.
+      wifiUp = runBleProvisioning(BLE_PROVISION_TIMEOUT_MS);
       stopBleProvisioning();
-      if (gotCreds) {
-        wifiUp = connectToWifi(netData.ssid, netData.password, WIFI_CONNECT_TIMEOUT_MS);
-      }
     }
 
     if (wifiUp && registerDeviceWithBackend()) {

@@ -160,7 +160,22 @@ class _WifiBleSetupSheetState extends State<WifiBleSetupSheet> {
       _passCtrl.text,
     ).listen(
       (status) {
-        if (mounted) setState(() => _statusMsg = status);
+        if (!mounted) return;
+        // The firmware's final messages say "successfully" / "failed" —
+        // act on those instead of just displaying every message and
+        // assuming stream-completion means success (it doesn't: the
+        // device can go quiet after a failed attempt just as easily as
+        // after a real success).
+        final lower = status.toLowerCase();
+        if (lower.contains('successfully')) {
+          setState(() { _phase = _Phase.success; _statusMsg = status; });
+          _statusSub?.cancel();
+        } else if (lower.contains('failed')) {
+          setState(() { _phase = _Phase.error; _errorMsg = status; });
+          _statusSub?.cancel();
+        } else {
+          setState(() => _statusMsg = status);
+        }
       },
       onError: (Object e) {
         if (mounted) {
@@ -171,8 +186,16 @@ class _WifiBleSetupSheetState extends State<WifiBleSetupSheet> {
         }
       },
       onDone: () {
+        // Reached only if the stream ended without ever sending an explicit
+        // success/failure message (e.g. the device went silent and the 30s
+        // idle timeout in sendWifiCredentialsStreaming fired) — treat that
+        // as inconclusive, not success.
         if (mounted && _phase == _Phase.sending) {
-          setState(() => _phase = _Phase.success);
+          setState(() {
+            _phase    = _Phase.error;
+            _errorMsg = 'No response from the device — it may still be '
+                'trying to connect. Check again shortly, or try again.';
+          });
         }
       },
       cancelOnError: true,
@@ -373,7 +396,13 @@ class _WifiBleSetupSheetState extends State<WifiBleSetupSheet> {
           message: _errorMsg,
           actionLabel: 'Try Again',
           colors: c,
-          onAction: () => setState(() { _phase = _Phase.init; _errorMsg = ''; }),
+          // Setting _phase alone previously left the sheet stuck on a
+          // spinner forever — nothing was listening for that transition.
+          // _init() is what actually restarts permission-check → scan.
+          onAction: () {
+            setState(() => _errorMsg = '');
+            _init();
+          },
         );
     }
   }
