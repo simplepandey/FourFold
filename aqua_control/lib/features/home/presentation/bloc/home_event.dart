@@ -23,7 +23,15 @@ class LoadHomeData extends HomeEvent {
 }
 
 class RefreshStatus extends HomeEvent {
-  const RefreshStatus();
+  // true for a user-initiated pull-to-refresh — bypasses the in-flight
+  // guard in HomeBloc so it never gets silently dropped just because the
+  // background poll timer's own fetch (which can itself take up to 30s)
+  // happens to still be running. false for the automatic poll tick, which
+  // should keep skipping itself while one is already in flight.
+  final bool force;
+  const RefreshStatus({this.force = false});
+  @override
+  List<Object?> get props => [force];
 }
 
 class ToggleMotor extends HomeEvent {

@@ -159,8 +159,15 @@ class _ModuleDetailViewState extends State<_ModuleDetailView> {
                 color: c.primary,
                 backgroundColor: c.surface,
                 onRefresh: () async {
-                  context.read<HomeBloc>().add(const RefreshStatus());
-                  await _loadInfo();
+                  final bloc = context.read<HomeBloc>();
+                  // add() alone doesn't wait for the handler to finish, so
+                  // the RefreshIndicator's spinner used to dismiss before
+                  // the status fetch even completed — wait for the next
+                  // HomeLoaded emission instead, same as a fresh LoadHomeData.
+                  final statusRefreshed =
+                      bloc.stream.firstWhere((s) => s is HomeLoaded);
+                  bloc.add(const RefreshStatus(force: true));
+                  await Future.wait([statusRefreshed, _loadInfo()]);
                 },
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),

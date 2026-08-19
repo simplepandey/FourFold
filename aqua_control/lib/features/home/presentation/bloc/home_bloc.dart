@@ -73,9 +73,12 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
 
   Future<void> _onRefresh(RefreshStatus event, Emitter<HomeState> emit) async {
     // A fetch already in flight (initial load, or a previous tick that's
-    // still waiting on the device) can itself take up to 15s now — skip
-    // rather than pile another one on top.
-    if (_fetching) return;
+    // still waiting on the device) can itself take up to 30s — skip the
+    // *automatic* poll tick rather than pile another one on top of it.
+    // A user-initiated pull-to-refresh (force: true) always goes through
+    // instead — silently dropping it just because a background poll
+    // happened to still be running is what made refresh look broken.
+    if (_fetching && !event.force) return;
     if (state is HomeLoaded) {
       final current = state as HomeLoaded;
       _fetching = true;
