@@ -181,12 +181,14 @@ export class ModuleStatusService implements OnModuleInit {
       // ucBreached are only ever set true (by processAlert), never cleared
       // — a manual refresh (GET /module-status, which lands here via
       // requestHeartbeatAndWait) would otherwise keep showing a stale
-      // breach forever even once current is genuinely back in range. Only
-      // clear while the motor is confirmed running - a near-zero reading
-      // because the relay is still latched off after a real fault must not
-      // look like "resolved".
-      const clearOc = payload.motor === true && payload.i <= payload.oc;
-      const clearUc = payload.motor === true && payload.i >= payload.uc;
+      // breach forever even once current is genuinely back in range. Clear
+      // both together via a single combined check (not two independent
+      // partial ones) once the motor is confirmed running - a near-zero
+      // reading because the relay is still latched off after a real fault
+      // must not look like "resolved" - and current is back within the
+      // full OC/UC band.
+      const backInRange =
+        payload.motor === true && payload.i >= payload.uc && payload.i <= payload.oc;
 
       await this.upsert({
         productCode,
@@ -195,8 +197,7 @@ export class ModuleStatusService implements OnModuleInit {
         overcurrent: payload.oc,
         undercurrent: payload.uc,
         ...(payload.motor !== undefined && { motorStatus: payload.motor ? 'ON' : 'OFF' }),
-        ...(clearOc && { ocBreached: false }),
-        ...(clearUc && { ucBreached: false }),
+        ...(backInRange && { ocBreached: false, ucBreached: false }),
         isOnline: true,
         updatedBy: 'device',
       });
