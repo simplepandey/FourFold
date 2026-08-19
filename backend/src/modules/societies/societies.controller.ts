@@ -1,15 +1,4 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Put,
-  Delete,
-  Param,
-  Body,
-  HttpCode,
-  HttpStatus,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -24,9 +13,7 @@ import {
 import { SocietiesService } from './societies.service';
 import { CreateSocietyDto } from './dto/create-society.dto';
 import { AddMemberDto } from './dto/add-member.dto';
-import { UpdateMemberDto } from './dto/update-member.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Societies')
 @Controller({ path: 'societies', version: '1' })
@@ -57,9 +44,9 @@ export class SocietiesController {
   @Post(':societyId/members')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
-    summary: 'Add a member to a society by phone number',
+    summary: 'Grant a phone number access to a specific device',
     description:
-      'If the phone number exists in the users table, userId is linked automatically. Otherwise the member is stored with userId = null until they register.',
+      'Members are always added per-device, not to the society as a whole. If the phone number exists in the users table, userId is linked automatically. Otherwise it is stored with userId = null until they register.',
   })
   @ApiParam({ name: 'societyId', description: 'Society UUID' })
   @ApiBody({ type: AddMemberDto })
@@ -71,7 +58,8 @@ export class SocietiesController {
         message: 'Member added successfully',
         data: {
           id: 'uuid',
-          societyId: 'society-uuid',
+          productCode: 'FF00100',
+          societyCode: 'SOC-1A2B3C4D',
           phoneNumber: '+919876543210',
           userId: 'user-uuid or null',
           role: 'member',
@@ -80,59 +68,11 @@ export class SocietiesController {
       },
     },
   })
-  @ApiConflictResponse({ description: 'Phone number is already a member of this society' })
+  @ApiConflictResponse({ description: 'Phone number already has access to this device' })
   @ApiNotFoundResponse({ description: 'Society not found' })
   async addMember(@Param('societyId') societyId: string, @Body() dto: AddMemberDto) {
     const data = await this.societiesService.addMember(societyId, dto);
     return { success: true, message: 'Member added successfully', data };
-  }
-
-  @Get(':societyId/members')
-  @ApiOperation({ summary: 'Get all members of a society' })
-  @ApiParam({ name: 'societyId', description: 'Society UUID' })
-  @ApiOkResponse({ description: 'List of society members' })
-  @ApiNotFoundResponse({ description: 'Society not found' })
-  async getMembers(@Param('societyId') societyId: string) {
-    const data = await this.societiesService.getMembers(societyId);
-    return { success: true, message: 'Members retrieved successfully', data };
-  }
-
-  @Put(':societyId/members/:memberId')
-  @ApiOperation({ summary: 'Update a member phone number or name' })
-  @ApiParam({ name: 'societyId', description: 'Society UUID' })
-  @ApiParam({ name: 'memberId', description: 'Member UUID' })
-  @ApiBody({ type: UpdateMemberDto })
-  @ApiOkResponse({ description: 'Member updated successfully' })
-  @ApiNotFoundResponse({ description: 'Member not found in this society' })
-  @ApiConflictResponse({ description: 'Phone number already belongs to another member' })
-  async updateMember(
-    @Param('societyId') societyId: string,
-    @Param('memberId') memberId: string,
-    @Body() dto: UpdateMemberDto,
-    @CurrentUser('id') requestingUserId: string,
-  ) {
-    const data = await this.societiesService.updateMember(
-      societyId,
-      memberId,
-      dto,
-      requestingUserId,
-    );
-    return { success: true, message: 'Member updated successfully', data };
-  }
-
-  @Delete(':societyId/members/:memberId')
-  @ApiOperation({ summary: 'Remove a member from a society' })
-  @ApiParam({ name: 'societyId', description: 'Society UUID' })
-  @ApiParam({ name: 'memberId', description: 'Member UUID' })
-  @ApiOkResponse({ description: 'Member removed successfully' })
-  @ApiNotFoundResponse({ description: 'Member not found in this society' })
-  async removeMember(
-    @Param('societyId') societyId: string,
-    @Param('memberId') memberId: string,
-    @CurrentUser('id') requestingUserId: string,
-  ) {
-    const data = await this.societiesService.removeMember(societyId, memberId, requestingUserId);
-    return { success: true, message: 'Member removed successfully', data };
   }
 
   @Get(':id')

@@ -11,12 +11,11 @@ abstract class _EnvConfig {
   String get moduleRegistration;
   String get motorCommand;
   String societyMembers(String societyId);
-  String societyMember(String societyId, String memberId);
 }
 
 class _LocalConfig extends _EnvConfig {
   @override
-  String get baseUrl => 'http://172.20.10.2:3000/api/v1';
+  String get baseUrl => 'http://192.168.1.7:3000/api/v1';
   @override
   String get userLogin => '/auth/user-login';
   @override
@@ -35,9 +34,6 @@ class _LocalConfig extends _EnvConfig {
   String get motorCommand => '/motor/command';
   @override
   String societyMembers(String societyId) => '/societies/$societyId/members';
-  @override
-  String societyMember(String societyId, String memberId) =>
-      '/societies/$societyId/members/$memberId';
 }
 
 class _DevConfig extends _EnvConfig {
@@ -61,9 +57,6 @@ class _DevConfig extends _EnvConfig {
   String get motorCommand => '/motor/command';
   @override
   String societyMembers(String societyId) => '/societies/$societyId/members';
-  @override
-  String societyMember(String societyId, String memberId) =>
-      '/societies/$societyId/members/$memberId';
 }
 
 class _ProdConfig extends _EnvConfig {
@@ -87,9 +80,6 @@ class _ProdConfig extends _EnvConfig {
   String get motorCommand => '/motor/command';
   @override
   String societyMembers(String societyId) => '/societies/$societyId/members';
-  @override
-  String societyMember(String societyId, String memberId) =>
-      '/societies/$societyId/members/$memberId';
 }
 
 class AppConfig {
@@ -126,14 +116,12 @@ class AppConfig {
   static String userModules(String userId) => '/device/user-modules/$userId';
   static String get moduleRegistration => _config.moduleRegistration;
   static String get motorCommand => _config.motorCommand;
-  static String moduleStatus(String serialNumber) =>
-      '/module-status/$serialNumber';
-  static String moduleActionLogs(String serialNumber) =>
-      '/module-action-logs/$serialNumber';
+  static String moduleStatus(String productCode) =>
+      '/module-status/$productCode';
+  static String moduleActionLogs(String productCode) =>
+      '/module-action-logs/$productCode';
   static String societyMembers(String societyId) =>
       _config.societyMembers(societyId);
-  static String societyMember(String societyId, String memberId) =>
-      _config.societyMember(societyId, memberId);
 
   static const String mockPhone = '+919876543210';
 }

@@ -1,9 +1,9 @@
 import 'package:equatable/equatable.dart';
 
-/// Mirrors a row of the backend `module_action_logs` table — GET /module-action-logs/:serialNumber
+/// Mirrors a row of the backend `module_action_logs` table — GET /module-action-logs/:productCode
 class ModuleActionLogModel extends Equatable {
   final String id;
-  final String serialNumber;
+  final String productCode;
   final double voltage;
   final double current;
   final double overcurrent;
@@ -18,7 +18,7 @@ class ModuleActionLogModel extends Equatable {
 
   const ModuleActionLogModel({
     required this.id,
-    required this.serialNumber,
+    required this.productCode,
     required this.voltage,
     required this.current,
     required this.overcurrent,
@@ -37,7 +37,7 @@ class ModuleActionLogModel extends Equatable {
   factory ModuleActionLogModel.fromJson(Map<String, dynamic> json) =>
       ModuleActionLogModel(
         id: (json['id'] as String?) ?? '',
-        serialNumber: (json['serialNumber'] as String?) ?? '',
+        productCode: (json['productCode'] as String?) ?? '',
         voltage: (json['voltage'] as num?)?.toDouble() ?? 0,
         current: (json['current'] as num?)?.toDouble() ?? 0,
         overcurrent: (json['overcurrent'] as num?)?.toDouble() ?? 0,
@@ -55,5 +55,5 @@ class ModuleActionLogModel extends Equatable {
       );
 
   @override
-  List<Object?> get props => [id, serialNumber, motorStatus, createdAt];
+  List<Object?> get props => [id, productCode, motorStatus, createdAt];
 }

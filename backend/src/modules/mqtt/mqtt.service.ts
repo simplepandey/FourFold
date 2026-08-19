@@ -1,21 +1,30 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as mqtt from 'mqtt';
-import { TelemetryService } from '../telemetry/telemetry.service';
 import { TopicPatternRepository } from './topic-pattern.repository';
 
-const DEFAULT_SUBSCRIBE_PATTERNS = ['motors/+/telemetry', 'motors/+/alert'];
+const DEFAULT_SUBSCRIBE_PATTERNS = ['motors/+/telemetry', 'motors/+/alert', 'motors/+/heartbeat'];
+
+export type MqttMessageHandler = (topic: string, payload: string) => Promise<void>;
 
 @Injectable()
 export class MqttService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MqttService.name);
   private client: mqtt.MqttClient;
+  // Keyed by the topic's last segment (telemetry/alert/heartbeat/...) — lets
+  // any module register interest without MqttModule needing to import that
+  // module directly (which is what caused a circular dependency back when
+  // this imported TelemetryModule to call it directly).
+  private readonly handlers = new Map<string, MqttMessageHandler>();
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly telemetryService: TelemetryService,
     private readonly topicPatternRepository: TopicPatternRepository,
   ) {}
+
+  registerHandler(topicSuffix: string, handler: MqttMessageHandler): void {
+    this.handlers.set(topicSuffix, handler);
+  }
 
   async onModuleInit(): Promise<void> {
     await this.topicPatternRepository.seedDefaults(DEFAULT_SUBSCRIBE_PATTERNS);
@@ -67,13 +76,12 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   private async handleMessage(topic: string, payload: Buffer): Promise<void> {
     const raw = payload.toString();
     const suffix = topic.split('/').pop();
+    const handler = suffix ? this.handlers.get(suffix) : undefined;
+
+    if (!handler) return;
 
     try {
-      if (suffix === 'telemetry') {
-        await this.telemetryService.processTelemetry(topic, raw);
-      } else if (suffix === 'alert') {
-        await this.telemetryService.processAlert(topic, raw);
-      }
+      await handler(topic, raw);
     } catch (err) {
       this.logger.error(`Error processing message on topic '${topic}': ${(err as Error).message}`);
     }

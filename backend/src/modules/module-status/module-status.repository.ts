@@ -7,18 +7,18 @@ export class ModuleStatusRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async upsert(
-    serialNumber: string,
+    productCode: string,
     create: Prisma.ModuleStatusCreateInput,
     update: Prisma.ModuleStatusUpdateInput,
   ): Promise<ModuleStatus> {
     return this.prisma.moduleStatus.upsert({
-      where: { serialNumber },
+      where: { productCode },
       create,
       update,
     });
   }
 
-  async findBySerialNumber(serialNumber: string): Promise<ModuleStatus | null> {
-    return this.prisma.moduleStatus.findUnique({ where: { serialNumber } });
+  async findByProductCode(productCode: string): Promise<ModuleStatus | null> {
+    return this.prisma.moduleStatus.findUnique({ where: { productCode } });
   }
 }

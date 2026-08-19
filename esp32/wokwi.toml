@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+firmware = 'build/em_pro_v2_2button.ino.bin'
+elf = 'build/em_pro_v2_2button.ino.elf'

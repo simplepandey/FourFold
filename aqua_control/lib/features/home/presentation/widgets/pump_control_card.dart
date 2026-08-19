@@ -18,6 +18,11 @@ class PumpControlCard extends StatelessWidget {
     final c = context.appColors;
     final isOn = status.motorStatus == MotorStatus.on;
     final isOff = status.motorStatus == MotorStatus.off;
+    // GET /module-status/:productCode now blocks until the device answers
+    // (or 15s elapses) before this screen even shows this card, so by the
+    // time we're here isOnline is already a settled, trustworthy answer —
+    // no separate "checking" buffer state needed on top of it.
+    final offline = !status.isOnline;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -111,20 +116,22 @@ class PumpControlCard extends StatelessWidget {
             children: [
               Expanded(
                   child: _ControlButton(
-                label: commandPending ? '…' : '✅  Motor ON',
+                label: offline ? 'OFFLINE' : '✅  Motor ON',
                 active: isOn,
                 activeColor: c.greenDark,
-                disabled: commandPending,
+                disabled: commandPending || offline,
+                loading: commandPending,
                 onTap: () =>
                     context.read<HomeBloc>().add(const ToggleMotor(true)),
               )),
               const SizedBox(width: 12),
               Expanded(
                   child: _ControlButton(
-                label: commandPending ? '…' : '⬛  Turn OFF',
+                label: offline ? 'OFFLINE' : '⬛  Turn OFF',
                 active: isOff,
                 activeColor: c.redDark,
-                disabled: commandPending,
+                disabled: commandPending || offline,
+                loading: commandPending,
                 onTap: () =>
                     context.read<HomeBloc>().add(const ToggleMotor(false)),
               )),
@@ -248,6 +255,7 @@ class _ControlButton extends StatelessWidget {
   final String label;
   final bool active;
   final bool disabled;
+  final bool loading;
   final Color activeColor;
   final VoidCallback onTap;
 
@@ -257,6 +265,7 @@ class _ControlButton extends StatelessWidget {
     required this.activeColor,
     required this.onTap,
     this.disabled = false,
+    this.loading = false,
   });
 
   @override
@@ -284,7 +293,7 @@ class _ControlButton extends StatelessWidget {
           ),
         ),
         alignment: Alignment.center,
-        child: disabled
+        child: loading
             ? SizedBox(
                 width: 18,
                 height: 18,
@@ -295,7 +304,11 @@ class _ControlButton extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: active ? activeColor : c.textMuted)),
+                    color: disabled
+                        ? c.textMuted
+                        : active
+                            ? activeColor
+                            : c.textMuted)),
       ),
     );
   }

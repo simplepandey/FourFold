@@ -49,20 +49,27 @@ model Society {
   @@map("societies")
 }
 
-model SocietyMember {
-  id           String   @id @default(uuid())
-  societyCode  String
-  phoneNumber  String
-  userId       String?
-  serialNumber String?
-  role         String   @default("member")
-  joinedAt     DateTime @default(now())
+// Per-device access + role — the only way members get added (there's no
+// society-wide roster). One person can have access to multiple devices
+// within the same society, each with its own role — e.g. admin on the pump
+// they registered, plain member on one a neighbor added them to. Also
+// determines a user's society context on login (see auth's
+// _resolveSociety), since that used to come from society_members.
+model DeviceMember {
+  id          String   @id @default(uuid())
+  productCode String
+  societyCode String
+  phoneNumber String
+  userId      String?
+  role        String   @default("member")
+  joinedAt    DateTime @default(now())
 
-  @@unique([societyCode, phoneNumber])
+  @@unique([productCode, phoneNumber])
+  @@index([productCode])
   @@index([societyCode])
   @@index([userId])
   @@index([phoneNumber])
-  @@map("society_members")
+  @@map("device_members")
 }
 
 model ModuleMaster {
@@ -81,7 +88,8 @@ model ModuleMaster {
 
 model ModuleRegistration {
   id           String    @id @default(uuid())
-  serialNumber String
+  productCode  String
+  name         String
   registeredTo String
   noOfPump     Int
   phase        String
@@ -98,7 +106,7 @@ model ModuleRegistration {
   updateDate   DateTime  @updatedAt
   isDeleted    Boolean   @default(false)
 
-  @@index([serialNumber])
+  @@index([productCode])
   @@index([isDeleted])
   @@map("module_registration")
 }
@@ -122,6 +130,7 @@ model EspRegistration {
   id           String   @id @default(uuid())
   serialNumber String
   serialHash   String
+  productCode  String   @unique
   type         String?
   username     String?
   userId       String?
@@ -180,7 +189,7 @@ model MotorAlert {
 
 model ModuleStatus {
   id                   String   @id @default(uuid())
-  serialNumber         String   @unique
+  productCode          String   @unique
   voltage              Float    @default(0)
   current              Float    @default(0)
   overcurrent          Float    @default(0)
@@ -190,10 +199,11 @@ model ModuleStatus {
   motorStatus          String   @default("OFF")
   ocBreached           Boolean  @default(false)
   ucBreached           Boolean  @default(false)
+  isOnline             Boolean  @default(false)
   updatedAt            DateTime @updatedAt
   updatedBy            String?
 
-  @@index([serialNumber])
+  @@index([productCode])
   @@map("module_status")
 }
 
@@ -207,7 +217,7 @@ model TopicPatternToSubscribe {
 
 model ModuleActionLog {
   id                   String   @id @default(uuid())
-  serialNumber         String
+  productCode          String
   voltage              Float    @default(0)
   current              Float    @default(0)
   overcurrent          Float    @default(0)
@@ -220,6 +230,6 @@ model ModuleActionLog {
   createdAt            DateTime @default(now())
   createdBy            String?
 
-  @@index([serialNumber])
+  @@index([productCode])
   @@map("module_action_logs")
 }

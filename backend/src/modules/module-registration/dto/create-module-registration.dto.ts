@@ -12,12 +12,20 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateModuleRegistrationDto {
   @ApiProperty({
-    example: 'SN-2024-001',
-    description: 'ESP32 serial number (must exist in esp_registrations)',
+    example: 'FF00100',
+    description: 'Device product code (must exist in esp_registrations)',
   })
   @IsString()
   @IsNotEmpty()
-  serialNumber: string;
+  productCode: string;
+
+  @ApiProperty({
+    example: 'Terrace Pump',
+    description: 'User-facing name for this device, shown on the dashboard instead of the product code',
+  })
+  @IsString()
+  @IsNotEmpty()
+  name: string;
 
   @ApiProperty({
     example: 'SOC-1A2B3C4D',
@@ -78,7 +86,7 @@ export class CreateModuleRegistrationDto {
 
   @ApiPropertyOptional({
     example: 'uuid-of-user',
-    description: 'User ID of the person registering (used to link serialNumber in society_members)',
+    description: 'User ID of the person registering (used to link productCode in society_members)',
   })
   @IsOptional()
   @IsString()

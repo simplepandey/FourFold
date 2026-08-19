@@ -2,7 +2,8 @@ import 'package:equatable/equatable.dart';
 
 class DeviceModel extends Equatable {
   final String espId;
-  final String serialNumber;
+  final String productCode;
+  final String name;
   final String societyCode;
   final String role;
   final String serialHash;
@@ -10,7 +11,8 @@ class DeviceModel extends Equatable {
 
   const DeviceModel({
     required this.espId,
-    required this.serialNumber,
+    required this.productCode,
+    required this.name,
     required this.societyCode,
     required this.role,
     required this.serialHash,
@@ -18,6 +20,10 @@ class DeviceModel extends Equatable {
   });
 
   bool get isAdmin => role == 'admin';
+
+  /// Falls back to the product code if a name was never set (shouldn't
+  /// happen once registered through the app, but the API field is nullable).
+  String get displayName => name.trim().isNotEmpty ? name : productCode;
 
   String get displaySubtitle {
     final addr = address.trim();
@@ -35,7 +41,8 @@ class DeviceModel extends Equatable {
         ?? '';
     return DeviceModel(
       espId:        (esp['id']            as String?) ?? '',
-      serialNumber: (json['serialNumber'] as String?) ?? '',
+      productCode:  (json['productCode']  as String?) ?? '',
+      name:         (json['name']         as String?) ?? '',
       societyCode:  (json['societyCode']  as String?) ?? '',
       role:         (json['role']         as String?) ?? 'member',
       serialHash:   (esp['serialHash']    as String?) ?? '',
@@ -44,5 +51,5 @@ class DeviceModel extends Equatable {
   }
 
   @override
-  List<Object?> get props => [espId, serialNumber];
+  List<Object?> get props => [espId, productCode];
 }

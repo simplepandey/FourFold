@@ -11,6 +11,7 @@ import { OtpService } from '../otp/otp.service';
 import { UsersService } from '../users/users.service';
 import { SocietiesService } from '../societies/societies.service';
 import { SocietiesRepository } from '../societies/societies.repository';
+import { DeviceService } from '../device/device.service';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
 
 @Injectable()
@@ -22,6 +23,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly societiesService: SocietiesService,
     private readonly societiesRepository: SocietiesRepository,
+    private readonly deviceService: DeviceService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -53,6 +55,11 @@ export class AuthService {
     if (!user.isVerified) {
       user = await this.usersService.markAsVerified(user.id);
     }
+
+    // Pick up any device access granted to this phone number before it had
+    // an account (e.g. someone added them as a member while userId was
+    // still unknown) — so it shows up starting with this very login.
+    await this.deviceService.claimDeviceMemberships(user.phoneNumber, user.id);
 
     const payload: JwtPayload = {
       sub: user.id,
@@ -107,6 +114,8 @@ export class AuthService {
       user = await this.usersService.markAsVerified(user.id);
     }
 
+    await this.deviceService.claimDeviceMemberships(user.phoneNumber, user.id);
+
     const payload: JwtPayload = { sub: user.id, phoneNumber: user.phoneNumber, type: 'user' };
     const token = this.jwtService.sign(payload);
     const societyInfo = await this._resolveSociety(user.id);
@@ -128,7 +137,10 @@ export class AuthService {
   }
 
   private async _resolveSociety(userId: string) {
-    const member = await this.societiesRepository.findFirstMemberByUserId(userId);
+    // Members are only ever granted access per-device now (society_members
+    // is gone) — so a user's society is whichever device they were added to
+    // first.
+    const member = await this.deviceService.findFirstDeviceMembership(userId);
     if (!member) return {};
     const society = await this.societiesRepository.findBySocietyCode(member.societyCode);
     if (!society) return {};

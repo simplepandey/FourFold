@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ModuleActionLogRepository } from './module-action-log.repository';
 
 export interface CreateModuleActionLogInput {
-  serialNumber: string;
+  productCode: string;
   voltage: number;
   current: number;
   overcurrent: number;
@@ -23,7 +23,7 @@ export class ModuleActionLogService {
     return this.repository.create(input);
   }
 
-  findBySerialNumber(serialNumber: string) {
-    return this.repository.findBySerialNumber(serialNumber);
+  findByProductCode(productCode: string) {
+    return this.repository.findByProductCode(productCode);
   }
 }

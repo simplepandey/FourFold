@@ -199,7 +199,7 @@ class _ModuleCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    device.serialNumber,
+                    device.displayName,
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: c.textPrimary),
                   ),
                   const SizedBox(height: 5),

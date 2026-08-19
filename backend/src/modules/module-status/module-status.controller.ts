@@ -17,13 +17,13 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 export class ModuleStatusController {
   constructor(private readonly service: ModuleStatusService) {}
 
-  @Get(':serialNumber')
+  @Get(':productCode')
   @ApiOperation({ summary: 'Get the current live status of a module' })
-  @ApiParam({ name: 'serialNumber', example: 'SN-2024-001' })
+  @ApiParam({ name: 'productCode', example: 'FF00100' })
   @ApiOkResponse({ description: 'Current module status' })
-  @ApiNotFoundResponse({ description: 'No status found for this serial number' })
-  async findOne(@Param('serialNumber') serialNumber: string) {
-    const data = await this.service.findBySerialNumber(serialNumber);
+  @ApiNotFoundResponse({ description: 'No status found for this product code' })
+  async findOne(@Param('productCode') productCode: string) {
+    const data = await this.service.findByProductCode(productCode);
     return { success: true, message: 'Module status retrieved successfully', data };
   }
 }

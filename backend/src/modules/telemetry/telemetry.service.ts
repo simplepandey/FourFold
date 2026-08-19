@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { TelemetryRepository } from './telemetry.repository';
 import { ModuleStatusService } from '../module-status/module-status.service';
+import { MqttService } from '../mqtt/mqtt.service';
 
 interface TelemetryPayload {
   v: number; // voltage (V)
@@ -14,16 +15,24 @@ interface TelemetryPayload {
 }
 
 @Injectable()
-export class TelemetryService {
+export class TelemetryService implements OnModuleInit {
   private readonly logger = new Logger(TelemetryService.name);
 
   constructor(
     private readonly repository: TelemetryRepository,
     private readonly moduleStatusService: ModuleStatusService,
+    private readonly mqttService: MqttService,
   ) {}
 
+  onModuleInit(): void {
+    this.mqttService.registerHandler('telemetry', (topic, payload) =>
+      this.processTelemetry(topic, payload),
+    );
+    this.mqttService.registerHandler('alert', (topic, payload) => this.processAlert(topic, payload));
+  }
+
   async processTelemetry(topic: string, rawPayload: string): Promise<void> {
-    const { serialHash } = this.parseTopic(topic);
+    const { topicKey } = this.parseTopic(topic);
 
     let payload: TelemetryPayload;
     try {
@@ -33,8 +42,10 @@ export class TelemetryService {
       return;
     }
 
-    const registration = await this.repository.findRegistrationByHash(serialHash);
+    const registration = await this.repository.findRegistrationByTopicKey(topicKey);
+    const serialHash = registration?.serialHash ?? topicKey;
     const serialNumber = registration?.serialNumber ?? payload.sn.toString();
+    const productCode = registration?.productCode ?? topicKey;
 
     await this.repository.createTelemetry({
       serialHash,
@@ -49,7 +60,7 @@ export class TelemetryService {
     });
 
     await this.moduleStatusService.upsert({
-      serialNumber,
+      productCode,
       voltage: payload.v,
       current: payload.i,
       overcurrent: payload.oc,
@@ -66,7 +77,7 @@ export class TelemetryService {
   }
 
   async processAlert(topic: string, rawPayload: string): Promise<void> {
-    const { serialHash } = this.parseTopic(topic);
+    const { topicKey } = this.parseTopic(topic);
 
     let payload: { overcurrent_breached?: number; undercurrent_breached?: number } = {};
     try {
@@ -76,8 +87,10 @@ export class TelemetryService {
       return;
     }
 
-    const registration = await this.repository.findRegistrationByHash(serialHash);
-    const serialNumber = registration?.serialNumber ?? serialHash;
+    const registration = await this.repository.findRegistrationByTopicKey(topicKey);
+    const serialHash = registration?.serialHash ?? topicKey;
+    const serialNumber = registration?.serialNumber ?? topicKey;
+    const productCode = registration?.productCode ?? topicKey;
 
     await this.repository.createAlert({
       serialHash,
@@ -87,7 +100,7 @@ export class TelemetryService {
     });
 
     await this.moduleStatusService.upsert({
-      serialNumber,
+      productCode,
       ocBreached: payload.overcurrent_breached != null,
       ucBreached: payload.undercurrent_breached != null,
       updatedBy: 'device',
@@ -98,9 +111,10 @@ export class TelemetryService {
     );
   }
 
-  private parseTopic(topic: string): { serialHash: string } {
-    // topic shape: motors/{serialHash}/telemetry|alert
+  private parseTopic(topic: string): { topicKey: string } {
+    // topic shape: motors/{topicKey}/telemetry|alert — topicKey is either a
+    // serialHash or a productCode, see findRegistrationByTopicKey().
     const segments = topic.split('/');
-    return { serialHash: segments[1] };
+    return { topicKey: segments[1] };
   }
 }

@@ -21,10 +21,11 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
   bool _isLoading = false;
   String? _error;
 
-  // Step 0 — serial
-  final _serialCtrl = TextEditingController();
+  // Step 0 — product code
+  final _productCodeCtrl = TextEditingController();
 
-  // Step 1 — pump details
+  // Step 1 — device configuration
+  final _nameCtrl = TextEditingController();
   int _noOfPumps = 1;
   final _hpCtrl = TextEditingController();
   String _phase = '1-Phase';
@@ -37,7 +38,8 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
 
   @override
   void dispose() {
-    _serialCtrl.dispose();
+    _productCodeCtrl.dispose();
+    _nameCtrl.dispose();
     _hpCtrl.dispose();
     _addressCtrl.dispose();
     _wingCtrl.dispose();
@@ -46,17 +48,17 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
     super.dispose();
   }
 
-  Future<void> _validateSerial() async {
-    final serial = _serialCtrl.text.trim().toUpperCase();
-    if (serial.isEmpty) {
-      setState(() => _error = 'Please enter a serial number');
+  Future<void> _validateProductCode() async {
+    final code = _productCodeCtrl.text.trim().toUpperCase();
+    if (code.isEmpty) {
+      setState(() => _error = 'Please enter a product code');
       return;
     }
-    _serialCtrl.text = serial; // normalize displayed text before moving to step 1
+    _productCodeCtrl.text = code; // normalize displayed text before moving to step 1
     setState(() { _isLoading = true; _error = null; });
     try {
       final repo = context.read<DeviceRepository>();
-      await repo.validateSerialNumber(serial);
+      await repo.validateProductCode(code);
       if (mounted) setState(() { _step = 1; _isLoading = false; });
     } catch (e) {
       if (mounted) {
@@ -69,6 +71,10 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
   }
 
   void _advanceToLocation() {
+    if (_nameCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Please enter a name for this device');
+      return;
+    }
     final hp = double.tryParse(_hpCtrl.text.trim());
     if (hp == null || hp <= 0) {
       setState(() => _error = 'Please enter a valid HP (e.g. 1.5)');
@@ -102,7 +108,8 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
     try {
       final repo = context.read<DeviceRepository>();
       await repo.registerModule(
-        serialNumber: _serialCtrl.text.trim(),
+        productCode: _productCodeCtrl.text.trim(),
+        name:         _nameCtrl.text.trim(),
         societyCode:  societyCode,
         noOfPump:     _noOfPumps,
         phase:        _phase,
@@ -161,14 +168,15 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
 
   Widget _stepContent() => switch (_step) {
         0 => _ScanStep(
-            serialCtrl: _serialCtrl,
+            productCodeCtrl: _productCodeCtrl,
             isLoading: _isLoading,
             error: _error,
             onCameraOpen: () {},
-            onNext: _validateSerial,
+            onNext: _validateProductCode,
           ),
         1 => _DetailsStep(
-            serial: _serialCtrl.text,
+            productCode: _productCodeCtrl.text,
+            nameCtrl: _nameCtrl,
             noOfPumps: _noOfPumps,
             hpCtrl: _hpCtrl,
             phase: _phase,
@@ -234,14 +242,14 @@ class _StepIndicator extends StatelessWidget {
 // ─── Step 0: Scan / Serial ────────────────────────────────────
 
 class _ScanStep extends StatelessWidget {
-  final TextEditingController serialCtrl;
+  final TextEditingController productCodeCtrl;
   final bool isLoading;
   final String? error;
   final VoidCallback onCameraOpen;
   final VoidCallback onNext;
 
   const _ScanStep({
-    required this.serialCtrl,
+    required this.productCodeCtrl,
     required this.isLoading,
     required this.error,
     required this.onCameraOpen,
@@ -257,7 +265,7 @@ class _ScanStep extends StatelessWidget {
         children: [
           Text('Scan Device QR Code', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: c.textPrimary)),
           const SizedBox(height: 8),
-          Text('Scan the QR code on your controller, or enter the serial number manually.',
+          Text('Scan the QR code on your controller, or enter the product code manually.',
               style: TextStyle(fontSize: 14, color: c.textSecondary)),
           const SizedBox(height: 32),
           Container(
@@ -289,9 +297,9 @@ class _ScanStep extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           CustomTextField(
-            label: 'SERIAL NUMBER',
-            hint: 'e.g. SN-2024-001',
-            controller: serialCtrl,
+            label: 'PRODUCT CODE',
+            hint: 'e.g. FF00100',
+            controller: productCodeCtrl,
             inputFormatters: [
               FilteringTextInputFormatter.deny(RegExp(r'\s')),
               _UpperCaseFormatter(),
@@ -312,10 +320,11 @@ class _ScanStep extends StatelessWidget {
   }
 }
 
-// ─── Step 1: Pump Details ─────────────────────────────────────
+// ─── Step 1: Device Configuration ──────────────────────────────
 
 class _DetailsStep extends StatelessWidget {
-  final String serial;
+  final String productCode;
+  final TextEditingController nameCtrl;
   final int noOfPumps;
   final TextEditingController hpCtrl;
   final String phase;
@@ -327,7 +336,8 @@ class _DetailsStep extends StatelessWidget {
   final VoidCallback onBack;
 
   const _DetailsStep({
-    required this.serial,
+    required this.productCode,
+    required this.nameCtrl,
     required this.noOfPumps,
     required this.hpCtrl,
     required this.phase,
@@ -346,16 +356,24 @@ class _DetailsStep extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Pump Configuration', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: c.textPrimary)),
+          Text('Device Configuration', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: c.textPrimary)),
           const SizedBox(height: 6),
           Row(
             children: [
               Icon(Icons.memory_outlined, size: 14, color: c.textMuted),
               const SizedBox(width: 6),
-              Text('Serial: $serial', style: TextStyle(fontSize: 13, color: c.textSecondary, fontFamily: 'monospace')),
+              Text('Product Code: $productCode', style: TextStyle(fontSize: 13, color: c.textSecondary, fontFamily: 'monospace')),
             ],
           ),
           const SizedBox(height: 28),
+
+          // Device name
+          CustomTextField(
+            label: 'NAME',
+            hint: 'e.g. Terrace Pump',
+            controller: nameCtrl,
+          ),
+          const SizedBox(height: 20),
 
           // No. of pumps
           _DropdownField<int>(

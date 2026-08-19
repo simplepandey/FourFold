@@ -30,7 +30,7 @@ class ModuleDetailScreen extends StatelessWidget {
       create: (_) => HomeBloc()
         ..add(LoadHomeData(
           userName: userName,
-          serialNumber: device.serialNumber,
+          productCode: device.productCode,
           societyCode: societyCode,
           commandBy: userId,
         )),
@@ -63,7 +63,7 @@ class _ModuleDetailViewState extends State<_ModuleDetailView> {
     try {
       final info = await context
           .read<DeviceRepository>()
-          .fetchDeviceInfo(widget.device.serialNumber);
+          .fetchDeviceInfo(widget.device.productCode);
       if (mounted)
         setState(() {
           _info = info;
@@ -143,7 +143,7 @@ class _ModuleDetailViewState extends State<_ModuleDetailView> {
                 final status = (state as HomeLoaded).status;
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(
-                      '⚠️ ${_alertMessage(status)} on ${widget.device.serialNumber}'),
+                      '⚠️ ${_alertMessage(status)} on ${widget.device.productCode}'),
                   backgroundColor: c.red,
                   behavior: SnackBarBehavior.floating,
                   duration: const Duration(seconds: 6),
@@ -170,11 +170,19 @@ class _ModuleDetailViewState extends State<_ModuleDetailView> {
                     children: [
                       // ── Header ──────────────────────────────────────
                       Text(
-                        widget.device.serialNumber,
+                        widget.device.displayName,
                         style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
                             color: c.textPrimary),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.device.productCode,
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            color: c.textMuted,
+                            fontFamily: 'monospace'),
                       ),
                       const SizedBox(height: 4),
                       if (_info?.module != null)
@@ -385,7 +393,7 @@ class _ModuleDetailViewState extends State<_ModuleDetailView> {
                       // ── History link ──────────────────────────────
                       GestureDetector(
                         onTap: () => context.push('/home/module-detail/history',
-                            extra: widget.device.serialNumber),
+                            extra: widget.device.productCode),
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -449,7 +457,7 @@ class _ModuleDetailViewState extends State<_ModuleDetailView> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _AddMemberSheet(
-        moduleName: widget.device.serialNumber,
+        moduleName: widget.device.productCode,
         societyId: societyId,
         repo: _societyRepo,
         onAdded: _loadInfo,
@@ -652,7 +660,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
       await widget.repo.addMember(
           societyId: widget.societyId,
           phoneNumber: _toE164(phone),
-          serialNumber: widget.moduleName);
+          productCode: widget.moduleName);
       if (mounted) {
         Navigator.pop(context);
         widget.onAdded();

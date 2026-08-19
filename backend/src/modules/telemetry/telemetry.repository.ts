@@ -45,7 +45,14 @@ export class TelemetryRepository {
     });
   }
 
-  async findRegistrationByHash(serialHash: string) {
-    return this.prisma.espRegistration.findFirst({ where: { serialHash } });
+  // The topic's identifier segment is the serialHash for devices registered
+  // before the productCode-based topic scheme, or the productCode for
+  // devices registered after it (existing devices' topics were deliberately
+  // not rewritten, to avoid breaking already-flashed firmware) — so this
+  // matches either.
+  async findRegistrationByTopicKey(topicKey: string) {
+    return this.prisma.espRegistration.findFirst({
+      where: { OR: [{ serialHash: topicKey }, { productCode: topicKey }] },
+    });
   }
 }

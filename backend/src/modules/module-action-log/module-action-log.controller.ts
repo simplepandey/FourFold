@@ -10,12 +10,12 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 export class ModuleActionLogController {
   constructor(private readonly service: ModuleActionLogService) {}
 
-  @Get(':serialNumber')
+  @Get(':productCode')
   @ApiOperation({ summary: 'Get recent action log entries for a module, most recent first' })
-  @ApiParam({ name: 'serialNumber', example: 'SN-2024-001' })
+  @ApiParam({ name: 'productCode', example: 'FF00100' })
   @ApiOkResponse({ description: 'List of action log entries' })
-  async findBySerial(@Param('serialNumber') serialNumber: string) {
-    const data = await this.service.findBySerialNumber(serialNumber);
+  async findByProductCode(@Param('productCode') productCode: string) {
+    const data = await this.service.findByProductCode(productCode);
     return { success: true, message: 'Action logs retrieved successfully', data };
   }
 }

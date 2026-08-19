@@ -21,7 +21,8 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:prod": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "ts-node prisma/seed.ts"
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "simulate:heartbeat": "node scripts/simulate-heartbeat.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",

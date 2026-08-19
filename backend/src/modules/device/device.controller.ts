@@ -44,15 +44,16 @@ export class DeviceController {
           id: 'uuid',
           serialNumber: 'SR12345',
           serialHash: 'a1b2c3d4e5f6',
+          productCode: 'FF00100',
           type: 'esp32',
           username: null,
           userId: null,
           societyId: null,
           topics: {
-            commands: 'motors/a1b2c3d4e5f6/commands',
-            telemetry: 'motors/a1b2c3d4e5f6/telemetry',
-            alert: 'motors/a1b2c3d4e5f6/alert',
-            heartbeat: 'motors/a1b2c3d4e5f6/heartbeat',
+            commands: 'motors/FF00100/commands',
+            telemetry: 'motors/FF00100/telemetry',
+            alert: 'motors/FF00100/alert',
+            heartbeat: 'motors/FF00100/heartbeat',
           },
           createdAt: '2026-07-22T10:00:00.000Z',
         },
@@ -105,7 +106,8 @@ export class DeviceController {
         message: 'User modules retrieved successfully',
         data: [
           {
-            serialNumber: 'SR12345',
+            productCode: 'FF00100',
+            name: 'Terrace Pump',
             societyCode: 'SOC-1A2B3C4D',
             role: 'admin',
             joinedAt: '2026-01-01T00:00:00.000Z',
@@ -127,11 +129,15 @@ export class DeviceController {
   @Public()
   @Get('info/:serialNo')
   @ApiOperation({
-    summary: 'Get full device info by serial number',
+    summary: 'Get full device info by serial number or product code',
     description:
-      'Returns ESP registration (MQTT topics), module registration (pump config + address), and all society members with their role (admin/member).',
+      'Returns ESP registration (MQTT topics), module registration (pump config + address), and all society members with their role (admin/member). Accepts either the ESP serialNumber or its productCode.',
   })
-  @ApiParam({ name: 'serialNo', example: 'SR12345', description: 'ESP device serial number' })
+  @ApiParam({
+    name: 'serialNo',
+    example: 'FF00100',
+    description: 'ESP device serial number OR product code',
+  })
   @ApiOkResponse({
     description: 'Combined device + member info',
     schema: {
@@ -143,17 +149,19 @@ export class DeviceController {
             id: 'uuid',
             serialNumber: 'SR12345',
             serialHash: 'a1b2c3d4e5f6',
+            productCode: 'FF00100',
             topics: {
-              commands: 'motors/a1b2c3d4e5f6/commands',
-              telemetry: 'motors/a1b2c3d4e5f6/telemetry',
-              alert: 'motors/a1b2c3d4e5f6/alert',
-              heartbeat: 'motors/a1b2c3d4e5f6/heartbeat',
+              commands: 'motors/FF00100/commands',
+              telemetry: 'motors/FF00100/telemetry',
+              alert: 'motors/FF00100/alert',
+              heartbeat: 'motors/FF00100/heartbeat',
             },
             createdAt: '2026-07-22T10:00:00.000Z',
           },
           module: {
             id: 'uuid',
-            serialNumber: 'SR12345',
+            productCode: 'FF00100',
+            name: 'Terrace Pump',
             registeredTo: 'SOC-1A2B3C4D',
             noOfPump: 3,
             phase: '3-Phase',
@@ -172,7 +180,7 @@ export class DeviceController {
               id: 'uuid',
               phoneNumber: '+919876543210',
               userId: 'user-uuid',
-              serialNumber: 'SR12345',
+              productCode: 'FF00100',
               role: 'admin',
               joinedAt: '2026-01-01T00:00:00.000Z',
             },
@@ -180,7 +188,7 @@ export class DeviceController {
               id: 'uuid',
               phoneNumber: '+919876543211',
               userId: 'user-uuid',
-              serialNumber: null,
+              productCode: null,
               role: 'member',
               joinedAt: '2026-02-15T00:00:00.000Z',
             },

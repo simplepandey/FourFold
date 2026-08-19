@@ -23,9 +23,9 @@ export class ModuleRegistrationRepository {
     });
   }
 
-  async findActiveBySerialNumber(serialNumber: string): Promise<ModuleRegistration | null> {
+  async findActiveByProductCode(productCode: string): Promise<ModuleRegistration | null> {
     return this.prisma.moduleRegistration.findFirst({
-      where: { serialNumber: { equals: serialNumber, mode: 'insensitive' }, isDeleted: false },
+      where: { productCode: { equals: productCode, mode: 'insensitive' }, isDeleted: false },
     });
   }
 

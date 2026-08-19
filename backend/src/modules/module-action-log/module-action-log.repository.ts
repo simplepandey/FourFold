@@ -10,9 +10,9 @@ export class ModuleActionLogRepository {
     return this.prisma.moduleActionLog.create({ data });
   }
 
-  async findBySerialNumber(serialNumber: string): Promise<ModuleActionLog[]> {
+  async findByProductCode(productCode: string): Promise<ModuleActionLog[]> {
     return this.prisma.moduleActionLog.findMany({
-      where: { serialNumber },
+      where: { productCode },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });

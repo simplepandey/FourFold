@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "author": "FourFold",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+
+    { "type": "wokwi-tm1637-7segment", "id": "display1", "top": -80, "left": 120, "attrs": {} },
+
+    { "type": "wokwi-pushbutton", "id": "btn_next", "top": 60, "left": 260, "attrs": { "color": "blue" } },
+    { "type": "wokwi-pushbutton", "id": "btn_up",   "top": 60, "left": 330, "attrs": { "color": "green" } },
+    { "type": "wokwi-pushbutton", "id": "btn_ocview", "top": 130, "left": 260, "attrs": {} },
+    { "type": "wokwi-pushbutton", "id": "btn_ucview", "top": 130, "left": 330, "attrs": {} },
+    { "type": "wokwi-pushbutton", "id": "btn_off", "top": 200, "left": 260, "attrs": { "color": "red" } },
+    { "type": "wokwi-pushbutton", "id": "btn_on",  "top": 200, "left": 330, "attrs": { "color": "yellow" } },
+
+    { "type": "wokwi-potentiometer", "id": "pot_current", "top": 60, "left": -220, "attrs": { "value": "0" } },
+    { "type": "wokwi-potentiometer", "id": "pot_voltage", "top": 160, "left": -220, "attrs": { "value": "50" } },
+
+    { "type": "wokwi-led", "id": "led_relay_main", "top": 260, "left": -60, "attrs": { "color": "red" } },
+    { "type": "wokwi-resistor", "id": "r_relay_main", "top": 260, "left": -120, "attrs": { "value": "220" } },
+    { "type": "wokwi-led", "id": "led_relay_soft", "top": 320, "left": -60, "attrs": { "color": "yellow" } },
+    { "type": "wokwi-resistor", "id": "r_relay_soft", "top": 320, "left": -120, "attrs": { "value": "220" } }
+  ],
+  "connections": [
+    [ "esp:TX0", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX0", "$serialMonitor:TX", "", [] ],
+
+    [ "display1:CLK", "esp:D18", "green", [] ],
+    [ "display1:DIO", "esp:D19", "yellow", [] ],
+    [ "display1:VCC", "esp:3V3", "red", [] ],
+    [ "display1:GND", "esp:GND.1", "black", [] ],
+
+    [ "esp:D5",  "btn_next:1.l",   "blue", [] ],
+    [ "esp:D21", "btn_next:2.l",   "blue", [] ],
+
+    [ "esp:D5",  "btn_up:1.l",     "blue", [] ],
+    [ "esp:D26", "btn_up:2.l",     "blue", [] ],
+
+    [ "esp:RX2", "btn_ocview:1.l", "orange", [] ],
+    [ "esp:D26", "btn_ocview:2.l", "orange", [] ],
+
+    [ "esp:RX2", "btn_ucview:1.l", "orange", [] ],
+    [ "esp:D21", "btn_ucview:2.l", "orange", [] ],
+
+    [ "esp:TX2", "btn_off:1.l",    "purple", [] ],
+    [ "esp:D26", "btn_off:2.l",    "purple", [] ],
+
+    [ "esp:TX2", "btn_on:1.l",     "purple", [] ],
+    [ "esp:D21", "btn_on:2.l",     "purple", [] ],
+
+    [ "pot_current:SIG", "esp:D33", "cyan", [] ],
+    [ "pot_current:VCC", "esp:3V3", "red", [] ],
+    [ "pot_current:GND", "esp:GND.2", "black", [] ],
+
+    [ "pot_voltage:SIG", "esp:D32", "cyan", [] ],
+    [ "pot_voltage:VCC", "esp:3V3", "red", [] ],
+    [ "pot_voltage:GND", "esp:GND.2", "black", [] ],
+
+    [ "esp:D4", "r_relay_main:1", "red", [] ],
+    [ "r_relay_main:2", "led_relay_main:A", "red", [] ],
+    [ "led_relay_main:C", "esp:GND.2", "black", [] ],
+
+    [ "esp:D23", "r_relay_soft:1", "red", [] ],
+    [ "r_relay_soft:2", "led_relay_soft:A", "red", [] ],
+    [ "led_relay_soft:C", "esp:GND.2", "black", [] ]
+  ],
+  "serialMonitor": { "display": "terminal" }
+}

@@ -225,6 +225,38 @@
   .app-feature-grid { grid-template-columns: 1fr; }
 }
 
+/* ---------- Product catalog (6-panel index) ---------- */
+.product-index { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 30px 0 10px; }
+.product-index a {
+  font-size: 13px; font-weight: 600; color: var(--light-text-dim);
+  background: var(--light-surface); border: 1px solid var(--light-border);
+  padding: 9px 16px; border-radius: 999px; transition: border-color .25s, color .25s, transform .25s;
+}
+.product-index a:hover { color: var(--blue-600); border-color: #93b8ff; transform: translateY(-2px); }
+.product-index a .pidx { color: var(--blue-600); font-family: 'Space Grotesk', sans-serif; font-weight: 700; margin-right: 6px; }
+
+.product-section { padding-top: 70px; padding-bottom: 70px; border-top: 1px solid var(--light-border); }
+.product-section:first-of-type { border-top: none; }
+.product-photo-card {
+  background: #fff; border-radius: 20px; padding: 18px;
+  box-shadow: 0 30px 60px -24px rgba(20,30,60,0.22), inset 0 0 0 1px #eef1f8;
+  max-width: 300px;
+}
+.product-photo-card img { width: 100%; display: block; border-radius: 8px; }
+
+.feature-check { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
+.feature-check li { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; color: var(--light-text-dim); line-height: 1.5; }
+.feature-check li::before { content: "✓"; flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--grad-brand-soft); color: var(--blue-600); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.feature-check li strong { color: var(--light-text); }
+
+.inherits-note { font-size: 13px; color: var(--light-text-dim); font-style: italic; margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--light-border); }
+.inherits-note a { color: var(--blue-600); font-weight: 600; }
+
+.mini-spec { margin-top: 22px; display: flex; flex-direction: column; }
+.mini-spec .row { display: flex; justify-content: space-between; gap: 14px; padding: 8px 0; border-bottom: 1px dotted var(--light-border); font-size: 13px; }
+.mini-spec .row .k { color: var(--light-text-dim); }
+.mini-spec .row .v { color: var(--light-text); font-weight: 600; text-align: right; }
+
 /* ---------- Manual / Product page ---------- */
 .spec-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
 .spec-table th, .spec-table td { text-align: left; padding: 14px 18px; border-bottom: 1px solid var(--light-border); font-size: 14.5px; }

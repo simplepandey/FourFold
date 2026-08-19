@@ -44,7 +44,7 @@ export class MotorCommandController {
           id: 'uuid',
           societyCode: 'SOC001',
           motorId: 'esp32_test',
-          serialNumber: 'SN-2024-001',
+          productCode: 'FF00100',
           command: 'TURN_ON',
           commandBy: 'user_id',
           cmdId: 'uuid',

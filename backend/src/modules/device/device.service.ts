@@ -13,16 +13,18 @@ export class DeviceService {
   async register(serialNumber: string, type?: string): Promise<{ data: object; created: boolean }> {
     const existing = await this.repository.findOneBySerialNumber(serialNumber);
     if (existing) {
-      this.topicCache.set(existing.serialNumber, existing.topics);
+      this.topicCache.set(existing.productCode, existing.topics);
       return { data: this.format(existing), created: false };
     }
 
     const serialHash = createHash('sha256').update(serialNumber).digest('hex').substring(0, 12);
+    const productCode = await this.repository.nextProductCode();
 
-    const base = `motors/${serialHash}`;
+    const base = `motors/${productCode}`;
     const registration = await this.repository.create({
       serialNumber,
       serialHash,
+      productCode,
       type,
       commandTopic: `${base}/commands`,
       telemetryTopic: `${base}/telemetry`,
@@ -30,7 +32,7 @@ export class DeviceService {
       heartbeatTopic: `${base}/heartbeat`,
     });
 
-    this.topicCache.set(registration.serialNumber, registration.topics);
+    this.topicCache.set(registration.productCode, registration.topics);
 
     return { data: this.format(registration), created: true };
   }
@@ -39,6 +41,7 @@ export class DeviceService {
     id: string;
     serialNumber: string;
     serialHash: string;
+    productCode: string;
     type: string | null;
     username: string | null;
     userId: string | null;
@@ -55,6 +58,7 @@ export class DeviceService {
       id: r.id,
       serialNumber: r.serialNumber,
       serialHash: r.serialHash,
+      productCode: r.productCode,
       type: r.type,
       username: r.username,
       userId: r.userId,
@@ -81,15 +85,60 @@ export class DeviceService {
     return this.repository.findByUserId(userId);
   }
 
+  async findByProductCode(productCode: string) {
+    const esp = await this.repository.findOneByProductCode(productCode);
+    if (!esp) {
+      throw new NotFoundException(`Device with product code '${productCode}' not found`);
+    }
+    return esp;
+  }
+
   async getUserModules(userId: string) {
     return this.repository.findModulesByUserId(userId);
   }
 
-  async getInfo(serialNumber: string) {
-    const { esp, module, members } = await this.repository.findFullInfoBySerialNumber(serialNumber);
+  // ── Per-device membership ────────────────────────────────────────
+  async grantDeviceAdmin(productCode: string, societyCode: string, userId: string) {
+    await this.repository.upsertDeviceMemberByUserId({
+      productCode,
+      societyCode,
+      userId,
+      role: 'admin',
+    });
+  }
+
+  async isDeviceMember(productCode: string, userId: string): Promise<boolean> {
+    const member = await this.repository.findDeviceMemberByUserId(productCode, userId);
+    return member !== null;
+  }
+
+  async findFirstDeviceMembership(userId: string) {
+    return this.repository.findFirstDeviceMemberByUserId(userId);
+  }
+
+  async claimDeviceMemberships(phoneNumber: string, userId: string): Promise<void> {
+    await this.repository.claimDeviceMembersByPhone(phoneNumber, userId);
+  }
+
+  async findDeviceMemberByPhone(productCode: string, phoneNumber: string) {
+    return this.repository.findDeviceMemberByPhone(productCode, phoneNumber);
+  }
+
+  async addDeviceMember(params: {
+    productCode: string;
+    societyCode: string;
+    phoneNumber: string;
+    userId?: string | null;
+    role: string;
+  }) {
+    return this.repository.createDeviceMember(params);
+  }
+
+  async getInfo(identifier: string) {
+    const { esp, module, members } = await this.repository.findFullInfoBySerialNumber(identifier);
 
     if (!esp && !module) {
-      throw new NotFoundException(`No records found for serial number '${serialNumber}'`);
+      throw new NotFoundException(`No records found for '${identifier}'`);
     }
 
     return {
@@ -98,6 +147,7 @@ export class DeviceService {
             id: esp.id,
             serialNumber: esp.serialNumber,
             serialHash: esp.serialHash,
+            productCode: esp.productCode,
             topics: {
               commands: esp.topics.commandTopic,
               telemetry: esp.topics.telemetryTopic,
@@ -110,7 +160,8 @@ export class DeviceService {
       module: module
         ? {
             id: module.id,
-            serialNumber: module.serialNumber,
+            productCode: module.productCode,
+            name: module.name,
             registeredTo: module.registeredTo,
             noOfPump: module.noOfPump,
             phase: module.phase,
@@ -129,7 +180,7 @@ export class DeviceService {
         id: m.id,
         phoneNumber: m.phoneNumber,
         userId: m.userId,
-        serialNumber: m.serialNumber,
+        productCode: m.productCode,
         role: m.role,
         joinedAt: m.joinedAt,
       })),

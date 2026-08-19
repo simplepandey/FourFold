@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/models/pump_status_model.dart';
 import '../../data/repositories/motor_repository.dart';
@@ -8,10 +9,16 @@ import 'home_state.dart';
 class HomeBloc extends Bloc<HomeEvent, HomeState> {
   final MotorRepository _motorRepo;
 
-  String _serialNumber = '';
+  String _productCode = '';
   String _societyCode = '';
   String _commandBy = '';
   Timer? _pollTimer;
+  // GET /module-status/:productCode now blocks server-side for up to 15s
+  // while it pings the device for a heartbeat, so a fetch already in flight
+  // (initial load or a poll tick) fully covers the "is it online" wait —
+  // guards against a new poll tick piling another 15s request on top of one
+  // that hasn't returned yet.
+  bool _fetching = false;
 
   HomeBloc({MotorRepository? motorRepo})
       : _motorRepo = motorRepo ?? MotorRepository(),
@@ -25,15 +32,22 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
 
   Future<void> _onLoad(LoadHomeData event, Emitter<HomeState> emit) async {
     emit(const HomeLoading());
-    _serialNumber = event.serialNumber;
+    _productCode = event.productCode;
     _societyCode = event.societyCode;
     _commandBy = event.commandBy;
     PumpStatusModel status;
+    _fetching = true;
     try {
       status = await _fetchStatus();
-    } catch (_) {
-      // No status recorded for this module yet — show zeroed values instead of an error screen.
-      status = PumpStatusModel.empty(_serialNumber);
+    } catch (e, st) {
+      // Surface the real cause (timeout vs 404 vs parse error vs connection
+      // error) instead of silently zeroing — a bare 404 (no status row yet)
+      // is expected here, anything else means the fetch itself failed.
+      debugPrint('HomeBloc._onLoad: fetchStatus failed for $_productCode: $e');
+      debugPrintStack(stackTrace: st);
+      status = PumpStatusModel.empty(_productCode);
+    } finally {
+      _fetching = false;
     }
     emit(HomeLoaded(
       status: status,
@@ -58,20 +72,28 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   }
 
   Future<void> _onRefresh(RefreshStatus event, Emitter<HomeState> emit) async {
+    // A fetch already in flight (initial load, or a previous tick that's
+    // still waiting on the device) can itself take up to 15s now — skip
+    // rather than pile another one on top.
+    if (_fetching) return;
     if (state is HomeLoaded) {
       final current = state as HomeLoaded;
+      _fetching = true;
       try {
         final status = await _fetchStatus();
         emit(current.copyWith(status: status));
-      } catch (_) {
+      } catch (e) {
         // Keep showing the last known status if a background refresh fails.
+        debugPrint('HomeBloc._onRefresh: fetchStatus failed for $_productCode: $e');
+      } finally {
+        _fetching = false;
       }
     }
   }
 
   Future<PumpStatusModel> _fetchStatus() async {
-    if (_serialNumber.isEmpty) return PumpStatusModel.empty(_serialNumber);
-    final moduleStatus = await _motorRepo.fetchStatus(_serialNumber);
+    if (_productCode.isEmpty) return PumpStatusModel.empty(_productCode);
+    final moduleStatus = await _motorRepo.fetchStatus(_productCode);
     return moduleStatus.toPumpStatus(pumpName: 'Main Pump');
   }
 
@@ -91,8 +113,8 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     try {
       await _motorRepo.sendCommand(
         societyCode: _societyCode,
-        motorId: _serialNumber,
-        serialNumber: _serialNumber,
+        motorId: _productCode,
+        productCode: _productCode,
         command: event.turnOn ? 'TURN_ON' : 'TURN_OFF',
         commandBy: _commandBy,
       );
@@ -135,16 +157,16 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     try {
       await _motorRepo.sendCommand(
         societyCode: _societyCode,
-        motorId: _serialNumber,
-        serialNumber: _serialNumber,
+        motorId: _productCode,
+        productCode: _productCode,
         command: 'SET_OC',
         value: event.overcurrent,
         commandBy: _commandBy,
       );
       await _motorRepo.sendCommand(
         societyCode: _societyCode,
-        motorId: _serialNumber,
-        serialNumber: _serialNumber,
+        motorId: _productCode,
+        productCode: _productCode,
         command: 'SET_UC',
         value: event.undercurrent,
         commandBy: _commandBy,

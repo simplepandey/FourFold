@@ -48,7 +48,8 @@ export class ModuleRegistrationController {
         message: 'Module registered successfully',
         data: {
           id: 'uuid',
-          serialNumber: 'SN-2024-001',
+          productCode: 'FF00100',
+          name: 'Terrace Pump',
           registeredTo: 'user-id',
           noOfPump: 3,
           phase: 'Single Phase',
@@ -62,7 +63,7 @@ export class ModuleRegistrationController {
       },
     },
   })
-  @ApiNotFoundResponse({ description: 'Module serial number not found' })
+  @ApiNotFoundResponse({ description: 'Module product code not found' })
   @ApiConflictResponse({ description: 'Module is already registered' })
   async create(@Body() dto: CreateModuleRegistrationDto) {
     const data = await this.service.create(dto);

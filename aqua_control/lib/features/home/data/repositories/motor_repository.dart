@@ -11,8 +11,15 @@ class MotorRepository {
   MotorRepository() {
     _dio = Dio(BaseOptions(
       baseUrl: AppConfig.baseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      // GET /module-status/:productCode blocks server-side for up to 30s
+      // (ModuleStatusService.HEARTBEAT_TIMEOUT_MS) — it pings the device for
+      // a heartbeat and sends zero bytes back until it settles. On Flutter
+      // Web, Dio's browser adapter has no separate TCP-connect phase, so
+      // connectTimeout effectively bounds the whole no-data wait — it must
+      // stay above the backend's 30s too, not just receiveTimeout, or a
+      // real 200 with correct data gets thrown away as a client timeout.
+      connectTimeout: const Duration(seconds: 40),
+      receiveTimeout: const Duration(seconds: 40),
     ));
 
     _dio.interceptors.add(InterceptorsWrapper(
@@ -34,13 +41,13 @@ class MotorRepository {
     ));
   }
 
-  /// POST /motor/command  { societyCode, motorId, serialNumber, command, value?, commandBy }
+  /// POST /motor/command  { societyCode, motorId, productCode, command, value?, commandBy }
   /// [command] one of TURN_ON | TURN_OFF | SET_OC | SET_UC. [value] is the threshold
   /// in amps, required for SET_OC / SET_UC.
   Future<void> sendCommand({
     required String societyCode,
     required String motorId,
-    required String serialNumber,
+    required String productCode,
     required String command,
     required String commandBy,
     double? value,
@@ -54,7 +61,7 @@ class MotorRepository {
       data: {
         'societyCode': societyCode,
         'motorId': motorId,
-        'serialNumber': serialNumber,
+        'productCode': productCode,
         'command': command,
         if (value != null) 'value': value,
         'commandBy': commandBy,
@@ -62,24 +69,24 @@ class MotorRepository {
     );
   }
 
-  /// GET /module-status/:serialNumber
-  Future<ModuleStatusModel> fetchStatus(String serialNumber) async {
+  /// GET /module-status/:productCode
+  Future<ModuleStatusModel> fetchStatus(String productCode) async {
     if (AppConfig.useMock) {
       await Future.delayed(const Duration(milliseconds: 400));
-      return ModuleStatusModel.mock(serialNumber);
+      return ModuleStatusModel.mock(productCode);
     }
-    final res = await _dio.get(AppConfig.moduleStatus(serialNumber));
+    final res = await _dio.get(AppConfig.moduleStatus(productCode));
     return ModuleStatusModel.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
-  /// GET /module-action-logs/:serialNumber — most recent first
+  /// GET /module-action-logs/:productCode — most recent first
   Future<List<ModuleActionLogModel>> fetchActionLogs(
-      String serialNumber) async {
+      String productCode) async {
     if (AppConfig.useMock) {
       await Future.delayed(const Duration(milliseconds: 400));
       return [];
     }
-    final res = await _dio.get(AppConfig.moduleActionLogs(serialNumber));
+    final res = await _dio.get(AppConfig.moduleActionLogs(productCode));
     final list = (res.data['data'] as List<dynamic>?) ?? [];
     return list
         .map((e) => ModuleActionLogModel.fromJson(e as Map<String, dynamic>))

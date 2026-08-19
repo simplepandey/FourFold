@@ -2,7 +2,7 @@ import { Injectable, ServiceUnavailableException, ForbiddenException } from '@ne
 import { randomUUID } from 'crypto';
 import { MotorCommandRepository } from './motor-command.repository';
 import { MqttService } from '../mqtt/mqtt.service';
-import { SocietiesService } from '../societies/societies.service';
+import { DeviceService } from '../device/device.service';
 import { ModuleStatusService } from '../module-status/module-status.service';
 import { ModuleActionLogService } from '../module-action-log/module-action-log.service';
 import { EspTopicCacheService } from '../device/esp-topic-cache.service';
@@ -13,25 +13,24 @@ export class MotorCommandService {
   constructor(
     private readonly repository: MotorCommandRepository,
     private readonly mqttService: MqttService,
-    private readonly societiesService: SocietiesService,
+    private readonly deviceService: DeviceService,
     private readonly moduleStatusService: ModuleStatusService,
     private readonly moduleActionLogService: ModuleActionLogService,
     private readonly espTopicCache: EspTopicCacheService,
   ) {}
 
   async sendCommand(dto: CreateMotorCommandDto) {
-    const isMember = await this.societiesService.checkUserMembership(
-      dto.societyCode,
-      dto.commandBy,
-    );
-    if (!isMember) {
+    // Device-level, not society-level — being a member of the society
+    // doesn't imply access to every device in it.
+    const hasAccess = await this.deviceService.isDeviceMember(dto.productCode, dto.commandBy);
+    if (!hasAccess) {
       throw new ForbiddenException(
-        'User is not a member of this society and cannot send motor commands',
+        'User does not have access to this device and cannot send motor commands',
       );
     }
 
     const cmdId = randomUUID();
-    const topics = await this.espTopicCache.getTopics(dto.serialNumber);
+    const topics = await this.espTopicCache.getTopics(dto.productCode);
     const topic = topics.commandTopic;
 
     const mqttPayload = {
@@ -58,7 +57,7 @@ export class MotorCommandService {
       status,
     });
 
-    const current = await this.moduleStatusService.findBySerialNumberOrNull(dto.serialNumber);
+    const current = await this.moduleStatusService.findByProductCodeOrNull(dto.productCode);
 
     const motorStatus =
       dto.command === 'TURN_ON'
@@ -70,7 +69,7 @@ export class MotorCommandService {
     const undercurrent = dto.command === 'SET_UC' ? dto.value! : (current?.undercurrent ?? 0);
 
     await this.moduleActionLogService.create({
-      serialNumber: dto.serialNumber,
+      productCode: dto.productCode,
       voltage: current?.voltage ?? 0,
       current: current?.current ?? 0,
       overcurrent,
@@ -84,7 +83,7 @@ export class MotorCommandService {
     });
 
     await this.moduleStatusService.upsert({
-      serialNumber: dto.serialNumber,
+      productCode: dto.productCode,
       motorStatus,
       overcurrent,
       undercurrent,

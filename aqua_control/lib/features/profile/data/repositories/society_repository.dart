@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../../core/config/app_config.dart';
-import '../models/society_member_model.dart';
 
 class SocietyRepository {
   final _storage = const FlutterSecureStorage();
@@ -33,13 +32,14 @@ class SocietyRepository {
   }
 
   /// POST /societies/:societyId/members
+  /// Grants [phoneNumber] access to [productCode] — members are always added
+  /// per-device, there's no society-wide roster.
   /// [phoneNumber] must be E.164 (+919876543210) — auto-converted if 10-digit Indian number.
-  /// [name] is optional.
   Future<void> addMember({
     required String societyId,
     required String phoneNumber,
+    required String productCode,
     String? name,
-    String? serialNumber,
   }) async {
     if (AppConfig.useMock) {
       await Future.delayed(const Duration(milliseconds: 700));
@@ -49,51 +49,10 @@ class SocietyRepository {
       AppConfig.societyMembers(societyId),
       data: {
         'phoneNumber': _toE164(phoneNumber),
+        'productCode': productCode.trim(),
         if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
-        if (serialNumber != null && serialNumber.trim().isNotEmpty) 'serialNumber': serialNumber.trim(),
       },
     );
-  }
-
-  /// GET /societies/:societyId/members
-  Future<List<SocietyMemberModel>> getMembers(String societyId) async {
-    if (AppConfig.useMock) {
-      await Future.delayed(const Duration(milliseconds: 600));
-      return SocietyMemberModel.mock;
-    }
-    final res = await _dio.get(AppConfig.societyMembers(societyId));
-    final list = (res.data['data'] as List<dynamic>?) ?? [];
-    return list.map((e) => SocietyMemberModel.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  /// PUT /societies/:societyId/members/:memberId  { role }
-  Future<SocietyMemberModel> updateMemberRole({
-    required String societyId,
-    required String memberId,
-    required String role,
-  }) async {
-    if (AppConfig.useMock) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      final m = SocietyMemberModel.mock.firstWhere((m) => m.id == memberId);
-      return m.copyWith(role: role);
-    }
-    final res = await _dio.put(
-      AppConfig.societyMember(societyId, memberId),
-      data: {'role': role},
-    );
-    return SocietyMemberModel.fromJson(res.data['data'] as Map<String, dynamic>);
-  }
-
-  /// DELETE /societies/:societyId/members/:memberId
-  Future<void> deleteMember({
-    required String societyId,
-    required String memberId,
-  }) async {
-    if (AppConfig.useMock) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      return;
-    }
-    await _dio.delete(AppConfig.societyMember(societyId, memberId));
   }
 
   static String _toE164(String mobile) {

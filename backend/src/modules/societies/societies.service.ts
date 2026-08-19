@@ -1,16 +1,11 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { SocietiesRepository } from './societies.repository';
 import { UsersService } from '../users/users.service';
+import { DeviceService } from '../device/device.service';
 import { CreateSocietyDto } from './dto/create-society.dto';
 import { AddMemberDto } from './dto/add-member.dto';
-import { UpdateMemberDto } from './dto/update-member.dto';
 import { Society } from '@prisma/client';
 
 @Injectable()
@@ -18,6 +13,7 @@ export class SocietiesService {
   constructor(
     private readonly societiesRepository: SocietiesRepository,
     private readonly usersService: UsersService,
+    private readonly deviceService: DeviceService,
   ) {}
 
   async create(dto: CreateSocietyDto) {
@@ -43,47 +39,37 @@ export class SocietiesService {
       await this.usersService.setPassword(user.id, hashedPassword);
     }
 
-    await this.societiesRepository.createMember({
-      societyCode: society.societyCode!,
-      phoneNumber: dto.phoneNumber,
-      userId: dto.createdBy ?? user?.id ?? null,
-      role: 'admin',
-    });
-
     return society;
   }
 
+  // Members are only ever granted access to a specific device — there's no
+  // society-wide roster anymore. The society's own admin logs in via
+  // societyLogin (password, matched on Society.phoneNumber directly), so
+  // they never needed a roster entry either.
   async addMember(societyId: string, dto: AddMemberDto) {
     const society = await this.societiesRepository.findById(societyId);
     if (!society) {
       throw new NotFoundException(`Society with id '${societyId}' not found`);
     }
+    const societyCode = society.societyCode!;
 
-    const existing = await this.societiesRepository.findMemberByPhone(
-      society.societyCode!,
+    const existingDeviceLink = await this.deviceService.findDeviceMemberByPhone(
+      dto.productCode,
       dto.phoneNumber,
     );
-    if (existing) {
-      throw new ConflictException('This phone number is already a member of this society');
+    if (existingDeviceLink) {
+      throw new ConflictException('This phone number already has access to this device');
     }
 
     const user = await this.societiesRepository.findUserByPhone(dto.phoneNumber);
 
-    return this.societiesRepository.createMember({
-      societyCode: society.societyCode!,
+    return this.deviceService.addDeviceMember({
+      productCode: dto.productCode,
+      societyCode,
       phoneNumber: dto.phoneNumber,
       userId: user?.id ?? null,
-      serialNumber: dto.serialNumber ?? null,
       role: 'member',
     });
-  }
-
-  async getMembers(societyId: string) {
-    const society = await this.societiesRepository.findById(societyId);
-    if (!society) {
-      throw new NotFoundException(`Society with id '${societyId}' not found`);
-    }
-    return this.societiesRepository.findMembersBySociety(society.societyCode!);
   }
 
   async findById(id: string) {
@@ -100,97 +86,5 @@ export class SocietiesService {
 
   async findAll() {
     return this.societiesRepository.findAll();
-  }
-
-  async updateMember(
-    societyId: string,
-    memberId: string,
-    dto: UpdateMemberDto,
-    requestingUserId: string,
-  ) {
-    const society = await this.societiesRepository.findById(societyId);
-    if (!society) {
-      throw new NotFoundException(`Society with id '${societyId}' not found`);
-    }
-
-    const requester = await this.societiesRepository.findMemberByUserId(
-      society.societyCode!,
-      requestingUserId,
-    );
-    if (!requester || requester.role !== 'admin') {
-      throw new ForbiddenException('Only admins can update members');
-    }
-
-    const member = await this.societiesRepository.findMemberById(memberId);
-    if (!member || member.societyCode !== society.societyCode) {
-      throw new NotFoundException(`Member not found in this society`);
-    }
-
-    const updates: { phoneNumber?: string; userId?: string | null; role?: string } = {};
-
-    if (dto.phoneNumber && dto.phoneNumber !== member.phoneNumber) {
-      const conflict = await this.societiesRepository.findMemberByPhone(
-        society.societyCode!,
-        dto.phoneNumber,
-      );
-      if (conflict) {
-        throw new ConflictException('This phone number is already a member of this society');
-      }
-      const user = await this.societiesRepository.findUserByPhone(dto.phoneNumber);
-      updates.phoneNumber = dto.phoneNumber;
-      updates.userId = user?.id ?? null;
-    }
-
-    if (dto.role) {
-      updates.role = dto.role;
-    }
-
-    if (dto.name && member.userId) {
-      await this.societiesRepository.updateUserName(member.userId, dto.name);
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return member;
-    }
-
-    return this.societiesRepository.updateMember(memberId, updates);
-  }
-
-  async removeMember(societyId: string, memberId: string, requestingUserId: string) {
-    const society = await this.societiesRepository.findById(societyId);
-    if (!society) {
-      throw new NotFoundException(`Society with id '${societyId}' not found`);
-    }
-
-    const requester = await this.societiesRepository.findMemberByUserId(
-      society.societyCode!,
-      requestingUserId,
-    );
-    if (!requester || requester.role !== 'admin') {
-      throw new ForbiddenException('Only admins can remove members');
-    }
-
-    const member = await this.societiesRepository.findMemberById(memberId);
-    if (!member || member.societyCode !== society.societyCode) {
-      throw new NotFoundException(`Member not found in this society`);
-    }
-
-    if (requester.id === memberId) {
-      throw new ForbiddenException('Admin cannot remove themselves from the society');
-    }
-
-    return this.societiesRepository.deleteMember(memberId);
-  }
-
-  async checkUserMembership(societyCode: string, userId: string): Promise<boolean> {
-    const member = await this.societiesRepository.findMemberByUserId(societyCode, userId);
-    return member !== null;
-  }
-
-  async isMemberOfSocietyById(societyId: string, userId: string): Promise<boolean> {
-    const society = await this.societiesRepository.findById(societyId);
-    if (!society || !society.societyCode) return false;
-    const member = await this.societiesRepository.findMemberByUserId(society.societyCode, userId);
-    return member !== null;
   }
 }

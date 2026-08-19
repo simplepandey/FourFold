@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { ModuleRegistrationRepository } from './module-registration.repository';
 import { DeviceService } from '../device/device.service';
-import { SocietiesRepository } from '../societies/societies.repository';
 import { ModuleStatusService } from '../module-status/module-status.service';
 import { CreateModuleRegistrationDto } from './dto/create-module-registration.dto';
 import { UpdateModuleRegistrationDto } from './dto/update-module-registration.dto';
@@ -11,27 +10,27 @@ export class ModuleRegistrationService {
   constructor(
     private readonly repository: ModuleRegistrationRepository,
     private readonly deviceService: DeviceService,
-    private readonly societiesRepository: SocietiesRepository,
     private readonly moduleStatusService: ModuleStatusService,
   ) {}
 
   async create(dto: CreateModuleRegistrationDto) {
     // 1. Verify the ESP is registered (throws NotFoundException if not), matched
-    // case-insensitively so "sr12345" and "SR12345" resolve to the same device.
-    const [esp] = await this.deviceService.findBySerialNumber(dto.serialNumber);
-    // Use the ESP's originally-registered casing everywhere below, so this
+    // case-insensitively so "ff00100" and "FF00100" resolve to the same device.
+    const esp = await this.deviceService.findByProductCode(dto.productCode);
+    // Use the ESP's originally-issued casing everywhere below, so this
     // registration stays joinable with EspRegistration regardless of how the
-    // user typed the serial number.
-    const serialNumber = esp.serialNumber;
+    // user typed the product code.
+    const productCode = esp.productCode;
 
     // 2. Prevent duplicate active registration
-    const existing = await this.repository.findActiveBySerialNumber(serialNumber);
+    const existing = await this.repository.findActiveByProductCode(productCode);
     if (existing) {
-      throw new ConflictException(`Module '${serialNumber}' is already registered`);
+      throw new ConflictException(`Module '${productCode}' is already registered`);
     }
 
     const registration = await this.repository.create({
-      serialNumber,
+      productCode,
+      name: dto.name,
       registeredTo: dto.societyCode,
       noOfPump: dto.noOfPump,
       phase: dto.phase,
@@ -47,15 +46,13 @@ export class ModuleRegistrationService {
     });
 
     if (dto.userId) {
-      await this.societiesRepository.updateMemberSerialNumber(
-        dto.societyCode,
-        dto.userId,
-        serialNumber,
-      );
+      // Whoever registers a device becomes its admin — a per-device role,
+      // independent of their role in the society roster.
+      await this.deviceService.grantDeviceAdmin(productCode, dto.societyCode, dto.userId);
     }
 
     await this.moduleStatusService.upsert({
-      serialNumber,
+      productCode,
       updatedBy: dto.createdBy,
     });
 

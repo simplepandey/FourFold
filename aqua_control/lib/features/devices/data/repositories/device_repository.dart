@@ -26,10 +26,11 @@ class DeviceRepository {
     ));
   }
 
-  /// Validates that the serial number exists in module-master.
-  Future<void> validateSerialNumber(String serial) async {
+  /// Validates that the product code exists (via the device-info lookup,
+  /// which accepts either the ESP serialNumber or its productCode).
+  Future<void> validateProductCode(String productCode) async {
     try {
-      await _dio.get('${AppConfig.deviceRegister}/$serial');
+      await _dio.get('${AppConfig.deviceInfo}/$productCode');
     } on DioException catch (e) {
       throw _mapError(e);
     }
@@ -37,7 +38,8 @@ class DeviceRepository {
 
   /// Registers a module to the current user/society.
   Future<void> registerModule({
-    required String serialNumber,
+    required String productCode,
+    required String name,
     required String societyCode,
     required int noOfPump,
     required String phase,
@@ -53,7 +55,8 @@ class DeviceRepository {
   }) async {
     try {
       await _dio.post(AppConfig.moduleRegistration, data: {
-        'serialNumber': serialNumber,
+        'productCode':  productCode,
+        'name':         name,
         'societyCode':  societyCode,
         'noOfPump':     noOfPump,
         'phase':        phase,
@@ -72,10 +75,10 @@ class DeviceRepository {
     }
   }
 
-  /// Fetches full device info (ESP MQTT topics, module config, members) by serial number.
-  Future<DeviceInfoModel> fetchDeviceInfo(String serialNumber) async {
+  /// Fetches full device info (ESP MQTT topics, module config, members) by product code.
+  Future<DeviceInfoModel> fetchDeviceInfo(String productCode) async {
     try {
-      final res = await _dio.get('${AppConfig.deviceInfo}/$serialNumber');
+      final res = await _dio.get('${AppConfig.deviceInfo}/$productCode');
       return DeviceInfoModel.fromJson(res.data['data'] as Map<String, dynamic>);
     } on DioException catch (e) {
       throw _mapError(e);
@@ -103,7 +106,7 @@ class DeviceRepository {
         : (raw as String?) ?? '';
 
     return switch (statusCode) {
-      404 => Exception('Serial number not found. Check the label on your device.'),
+      404 => Exception('Product code not found. Check the label on your device.'),
       409 => Exception('This device is already registered to a society.'),
       401 => Exception('Session expired. Please log in again.'),
       400 => _map400Error(apiMsg),

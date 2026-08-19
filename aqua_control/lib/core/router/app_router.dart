@@ -11,7 +11,6 @@ import '../../features/devices/data/models/device_model.dart';
 import '../../features/devices/presentation/screens/devices_screen.dart';
 import '../../features/devices/presentation/screens/add_device_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
-import '../../features/profile/presentation/screens/members_screen.dart';
 import '../../features/motor_settings/presentation/screens/motor_settings_screen.dart';
 
 class AppRouter {
@@ -54,7 +53,7 @@ class AppRouter {
                     GoRoute(
                       path: 'history',
                       builder: (context, state) => ActivityHistoryScreen(
-                        serialNumber: state.extra as String,
+                        productCode: state.extra as String,
                       ),
                     ),
                   ],
@@ -82,14 +81,6 @@ class AppRouter {
             GoRoute(
               path: '/profile',
               builder: (context, state) => const ProfileScreen(),
-              routes: [
-                GoRoute(
-                  path: 'members',
-                  builder: (context, state) => MembersScreen(
-                    societyId: state.extra as String,
-                  ),
-                ),
-              ],
             ),
           ]),
         ],

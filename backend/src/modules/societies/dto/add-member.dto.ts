@@ -13,9 +13,11 @@ export class AddMemberDto {
   @IsNotEmpty()
   name?: string;
 
-  @ApiPropertyOptional({ example: 'SR00123' })
-  @IsOptional()
+  @ApiProperty({
+    example: 'FF00100',
+    description: 'Device to grant this phone number access to — members are always added per-device',
+  })
   @IsString()
   @IsNotEmpty()
-  serialNumber?: string;
+  productCode: string;
 }

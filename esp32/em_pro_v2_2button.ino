@@ -6,6 +6,16 @@
   #include <TM1637Display.h>
   #include <EEPROM.h>
   #include <esp_task_wdt.h>
+  #include <string.h>
+  #include <WiFi.h>
+  #include <WiFiClientSecure.h>
+  #include <HTTPClient.h>
+  #include <ArduinoJson.h>
+  #include <BLEDevice.h>
+  #include <BLEServer.h>
+  #include <BLEUtils.h>
+  #include <BLE2902.h>
+  #include <PubSubClient.h>
 //---------------------------------
 
 //----------Definations------------
@@ -38,11 +48,48 @@
   #define OC_SAFE_DEFAULT   30
   #define UC_SAFE_DEFAULT   20
 
-  #define EEPROM_SIZE 200
+  #define EEPROM_SIZE 512
   #define EEPROM_CAL_ADDR 0
+  #define EEPROM_NET_ADDR 16
 
   #define BTN_NEXT BTN_DIGIT1
   #define BTN_UP   BTN_DIGIT2
+
+  // ---- WiFi / BLE provisioning ----
+  #define BLE_PROVISION_TIMEOUT_MS  45000UL
+  #define WIFI_CONNECT_TIMEOUT_MS   15000UL
+
+  // Must match aqua_control's BLE WiFi provisioning service
+  // (aqua_control/lib/core/services/ble_wifi_service.dart)
+  #define BLE_SERVICE_UUID      "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+  #define BLE_SSID_CHAR_UUID    "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+  #define BLE_PASS_CHAR_UUID    "beb5483f-36e1-4688-b7f5-ea07361b26a9"
+  #define BLE_STATUS_CHAR_UUID  "beb54840-36e1-4688-b7f5-ea07361b26aa"
+
+  // ---- Backend device registration ----
+  #define BACKEND_BASE_URL   "https://api.fourfoldsystem.com"
+  #define BACKEND_AUTH_USER  "fourfold"
+  #define BACKEND_AUTH_PASS  "fourfold"
+
+  // ---- MQTT telemetry ----
+  // Plain mqtt://, shared credentials - matches what the backend itself
+  // connects with today (backend/.env, backend/README.md). Not the
+  // TLS/per-device-credential setup described in vultr-emqx-complete-guide.md
+  // - that isn't implemented on the backend side yet.
+  #define MQTT_BROKER_HOST         "65.20.84.166"
+  #define MQTT_BROKER_PORT         1883
+  #define MQTT_USERNAME            "fourfold"
+  #define MQTT_PASSWORD            "fourfold@2026"
+  #define TELEMETRY_FIRST_SEND_MS  120000UL
+
+  // Uncomment to skip BLE provisioning on boot and connect straight to
+  // Wokwi's simulated open network, for bench-testing the WiFi/HTTP/EEPROM
+  // path without a phone. Never enable this in a production build.
+  // #define SIM_WIFI_TEST
+  #ifdef SIM_WIFI_TEST
+    #define SIM_WIFI_SSID "Wokwi-GUEST"
+    #define SIM_WIFI_PASS ""
+  #endif
 //---------------------------------
 
 //----------Variable---------------
@@ -63,6 +110,28 @@
     uint16_t crc;
   };
   CalibrationData calib;
+
+  struct NetworkData {
+    char ssid[33];
+    char password[65];
+    char topicCommands[64];
+    char topicTelemetry[64];
+    char topicAlert[64];
+    char topicHeartbeat[64];
+    bool wifiValid;
+    bool topicsValid;
+    uint16_t crc;
+  };
+  NetworkData netData;
+
+  BLECharacteristic* bleStatusChar = nullptr;
+  volatile bool bleSsidReceived = false;
+  volatile bool blePassReceived = false;
+  char bleSsidBuf[33];
+  char blePassBuf[65];
+
+  bool telemetrySent = false;
+
   enum ButtonCode {
     BTN_DIGIT1 = 1, BTN_DIGIT2 = 2, BTN_DIGIT3 = 3, BTN_DIGIT4 = 4,
     BTN_OC_VIEW = 5, BTN_UC_VIEW = 6,
@@ -128,12 +197,22 @@
     };
     esp_task_wdt_init(&wdtConfig);
     esp_task_wdt_add(NULL);
+
+    setupNetworking();
   }
 //---------------------------------
 
 //----------loop-------------------
   void loop() {
     esp_task_wdt_reset();
+
+    // One-shot telemetry publish, 2 minutes after boot. Cheap flag+time
+    // check every cycle; the actual MQTT work only ever runs once.
+    if (!telemetrySent && millis() >= TELEMETRY_FIRST_SEND_MS) {
+      telemetrySent = true;
+      sendTelemetry();
+    }
+
     keypad.setDebounceTime(KEYPAD_DEBOUNCE_MS);
     precesskey();
 
@@ -728,5 +807,246 @@
     }
     OC = calib.ocValue;
     UC = calib.ucValue;
+  }
+//----------------------------------
+
+//----------Networking--------------
+  // Derived from the efuse MAC, not stored - stable across reboots without
+  // needing its own EEPROM slot.
+  String getDeviceSerial() {
+    uint64_t mac = ESP.getEfuseMac();
+    char buf[13];
+    snprintf(buf, sizeof(buf), "%012llX", mac);
+    return "SR" + String(buf);
+  }
+
+  bool loadNetworkData() {
+    EEPROM.get(EEPROM_NET_ADDR, netData);
+    uint16_t expected = crc16((uint8_t*)&netData, sizeof(netData) - sizeof(netData.crc));
+    if (netData.crc != expected) {
+      memset(&netData, 0, sizeof(netData));
+      return false; // no valid stored network config yet
+    }
+    return true;
+  }
+
+  void saveNetworkData() {
+    netData.crc = crc16((uint8_t*)&netData, sizeof(netData) - sizeof(netData.crc));
+    EEPROM.put(EEPROM_NET_ADDR, netData);
+    EEPROM.commit();
+  }
+
+  bool connectToWifi(const char* ssid, const char* pass, unsigned long timeoutMs) {
+    if (ssid == nullptr || ssid[0] == '\0') return false;
+
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, pass);
+
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < timeoutMs) {
+      esp_task_wdt_reset();
+      delay(200);
+    }
+    return WiFi.status() == WL_CONNECTED;
+  }
+
+  void bleNotifyStatus(const char* msg) {
+    if (bleStatusChar == nullptr) return;
+    bleStatusChar->setValue(msg);
+    bleStatusChar->notify();
+  }
+
+  class BleSsidCallback : public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic* c) override {
+      strlcpy(bleSsidBuf, c->getValue().c_str(), sizeof(bleSsidBuf));
+      bleSsidReceived = true;
+    }
+  };
+
+  class BlePassCallback : public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic* c) override {
+      strlcpy(blePassBuf, c->getValue().c_str(), sizeof(blePassBuf));
+      blePassReceived = true;
+    }
+  };
+
+  // Advertises the BLE GATT service aqua_control's WiFi provisioning flow
+  // expects, and waits up to timeoutMs for both the SSID and password
+  // characteristics to be written. Returns true only if both arrived in time.
+  bool runBleProvisioning(unsigned long timeoutMs) {
+    bleSsidReceived = false;
+    blePassReceived = false;
+    memset(bleSsidBuf, 0, sizeof(bleSsidBuf));
+    memset(blePassBuf, 0, sizeof(blePassBuf));
+
+    String serial = getDeviceSerial();
+    String bleName = "AquaControl-" + serial.substring(serial.length() - 6);
+    BLEDevice::init(bleName.c_str());
+
+    BLEServer* server = BLEDevice::createServer();
+    BLEService* service = server->createService(BLE_SERVICE_UUID);
+
+    BLECharacteristic* ssidChar = service->createCharacteristic(
+      BLE_SSID_CHAR_UUID, BLECharacteristic::PROPERTY_WRITE);
+    ssidChar->setCallbacks(new BleSsidCallback());
+
+    BLECharacteristic* passChar = service->createCharacteristic(
+      BLE_PASS_CHAR_UUID, BLECharacteristic::PROPERTY_WRITE);
+    passChar->setCallbacks(new BlePassCallback());
+
+    bleStatusChar = service->createCharacteristic(
+      BLE_STATUS_CHAR_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+    bleStatusChar->addDescriptor(new BLE2902());
+
+    service->start();
+    BLEAdvertising* advertising = BLEDevice::getAdvertising();
+    advertising->addServiceUUID(BLE_SERVICE_UUID);
+    advertising->setScanResponse(true);
+    BLEDevice::startAdvertising();
+
+    unsigned long start = millis();
+    bool gotBoth = false;
+    while (millis() - start < timeoutMs) {
+      esp_task_wdt_reset();
+      if (bleSsidReceived && blePassReceived) { gotBoth = true; break; }
+      delay(50);
+    }
+    return gotBoth;
+  }
+
+  // Frees the BLE radio/stack so it doesn't contend with WiFi - always call
+  // this before connectToWifi(), never while BLE is still active.
+  void stopBleProvisioning() {
+    BLEDevice::stopAdvertising();
+    bleStatusChar = nullptr;
+    BLEDevice::deinit(true);
+  }
+
+  // POSTs to the backend registration endpoint and stores the returned MQTT
+  // topics into netData on success. Idempotent - safe to call on every boot.
+  bool registerDeviceWithBackend() {
+    String url = String(BACKEND_BASE_URL) + "/api/v1/device/register/" +
+                 getDeviceSerial() + "?type=esp32";
+
+    WiFiClientSecure client;
+    client.setInsecure(); // no CA pinned - see esp32/README.md security note
+
+    HTTPClient http;
+    if (!http.begin(client, url)) return false;
+
+    http.setAuthorization(BACKEND_AUTH_USER, BACKEND_AUTH_PASS);
+    http.addHeader("accept", "application/json");
+    int httpCode = http.POST("");
+
+    bool ok = false;
+    if (httpCode == 200 || httpCode == 201) {
+      JsonDocument doc; // requires ArduinoJson v7+
+      if (deserializeJson(doc, http.getString()) == DeserializationError::Ok &&
+          doc["success"] == true) {
+        JsonObject topics = doc["data"]["topics"].as<JsonObject>();
+        strlcpy(netData.topicCommands,  topics["commands"]  | "", sizeof(netData.topicCommands));
+        strlcpy(netData.topicTelemetry, topics["telemetry"] | "", sizeof(netData.topicTelemetry));
+        strlcpy(netData.topicAlert,     topics["alert"]     | "", sizeof(netData.topicAlert));
+        strlcpy(netData.topicHeartbeat, topics["heartbeat"] | "", sizeof(netData.topicHeartbeat));
+        netData.topicsValid = true;
+        ok = true;
+      }
+    }
+
+    http.end();
+    return ok;
+  }
+
+  // Forces a handful of fresh current/voltage samples so res/res3 reflect
+  // "now" rather than whatever stale value was last computed - relevant
+  // because Show_Current()/Show_Voltage() only average once every 5+ calls.
+  // Note: Show_Current() unconditionally calls print() as a side effect, so
+  // this briefly flickers the display to current-reading digits even if the
+  // motor is off (harmless, matches its existing behavior during normal
+  // ON-state operation - just noting it here since telemetry now triggers
+  // it from a new context).
+  void sampleElectricalReadings() {
+    for (int i = 0; i < 6; i++) {
+      Show_Current();
+      Show_Voltage(0);
+      delay(6);
+    }
+  }
+
+  // One-shot telemetry publish. Connects, publishes, disconnects - no
+  // persistent MQTT session is kept, since this only fires once (2 minutes
+  // after boot, see loop()). A persistent client would make more sense if
+  // this becomes a recurring publish or starts handling commands/heartbeat.
+  bool sendTelemetry() {
+    if (WiFi.status() != WL_CONNECTED || !netData.topicsValid) return false;
+
+    sampleElectricalReadings();
+
+    JsonDocument doc;
+    doc["v"] = res3;
+    doc["i"] = res;
+    doc["oc"] = OC;
+    doc["uc"] = UC;
+    doc["motor"] = (digitalRead(PIN_RELAY_MAIN) == HIGH);
+    doc["sn"] = getDeviceSerial();
+
+    char payload[192];
+    size_t len = serializeJson(doc, payload, sizeof(payload));
+
+    WiFiClient netClient;
+    PubSubClient mqtt(netClient);
+    mqtt.setServer(MQTT_BROKER_HOST, MQTT_BROKER_PORT);
+    mqtt.setSocketTimeout(3); // keep well under WDT_TIMEOUT_S so a slow/unreachable broker can't trip the watchdog
+
+    String clientId = "esp32-" + getDeviceSerial();
+    esp_task_wdt_reset();
+    if (!mqtt.connect(clientId.c_str(), MQTT_USERNAME, MQTT_PASSWORD)) return false;
+
+    bool ok = mqtt.publish(netData.topicTelemetry, (const uint8_t*)payload, len);
+    mqtt.disconnect();
+    esp_task_wdt_reset();
+    return ok;
+  }
+
+  // Runs once at boot, after the watchdog is armed. Tries stored WiFi
+  // credentials first; only falls back to BLE provisioning (45s window) if
+  // there are none, or if the stored ones fail to connect. If BLE
+  // provisioning doesn't yield a connection either, this just returns with
+  // no network - the rest of the firmware behaves exactly as it did before
+  // this feature existed, since motor protection never depends on network
+  // state.
+  void setupNetworking() {
+    loadNetworkData();
+
+    #ifdef SIM_WIFI_TEST
+      if (!netData.wifiValid) {
+        strlcpy(netData.ssid, SIM_WIFI_SSID, sizeof(netData.ssid));
+        strlcpy(netData.password, SIM_WIFI_PASS, sizeof(netData.password));
+        netData.wifiValid = true;
+      }
+    #endif
+
+    bool wifiUp = netData.wifiValid &&
+                  connectToWifi(netData.ssid, netData.password, WIFI_CONNECT_TIMEOUT_MS);
+
+    if (!wifiUp) {
+      bool gotCreds = runBleProvisioning(BLE_PROVISION_TIMEOUT_MS);
+      if (gotCreds) {
+        strlcpy(netData.ssid, bleSsidBuf, sizeof(netData.ssid));
+        strlcpy(netData.password, blePassBuf, sizeof(netData.password));
+        netData.wifiValid = true;
+        saveNetworkData();
+        bleNotifyStatus("Credentials received, connecting to WiFi...");
+        delay(300); // let the notification go out before tearing down BLE
+      }
+      stopBleProvisioning();
+      if (gotCreds) {
+        wifiUp = connectToWifi(netData.ssid, netData.password, WIFI_CONNECT_TIMEOUT_MS);
+      }
+    }
+
+    if (wifiUp && registerDeviceWithBackend()) {
+      saveNetworkData();
+    }
   }
 //----------------------------------

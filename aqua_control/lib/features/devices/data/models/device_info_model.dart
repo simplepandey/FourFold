@@ -23,12 +23,14 @@ class EspInfo {
   final String id;
   final String serialNumber;
   final String serialHash;
+  final String productCode;
   final MqttTopics topics;
 
   const EspInfo({
     required this.id,
     required this.serialNumber,
     required this.serialHash,
+    required this.productCode,
     required this.topics,
   });
 
@@ -36,14 +38,16 @@ class EspInfo {
         id:           json['id']           as String,
         serialNumber: json['serialNumber'] as String,
         serialHash:   json['serialHash']   as String,
+        productCode:  json['productCode']  as String,
         topics:       MqttTopics.fromJson(json['topics'] as Map<String, dynamic>),
       );
 }
 
 class ModuleInfo {
   final String id;
-  final String serialNumber;
+  final String productCode;
   final String registeredTo;
+  final String name;
   final int noOfPump;
   final String phase;
   final double hpOfPump;
@@ -57,7 +61,8 @@ class ModuleInfo {
 
   const ModuleInfo({
     required this.id,
-    required this.serialNumber,
+    required this.productCode,
+    required this.name,
     required this.registeredTo,
     required this.noOfPump,
     required this.phase,
@@ -73,7 +78,8 @@ class ModuleInfo {
 
   factory ModuleInfo.fromJson(Map<String, dynamic> json) => ModuleInfo(
         id:           json['id']           as String,
-        serialNumber: json['serialNumber'] as String,
+        productCode:  json['productCode']  as String,
+        name:         (json['name']        as String?) ?? '',
         registeredTo: json['registeredTo'] as String,
         noOfPump:     json['noOfPump']     as int,
         phase:        json['phase']        as String,
@@ -92,7 +98,7 @@ class DeviceMemberModel {
   final String id;
   final String phoneNumber;
   final String? userId;
-  final String? serialNumber;
+  final String? productCode;
   final String role;
 
   bool get isAdmin => role == 'admin';
@@ -101,16 +107,16 @@ class DeviceMemberModel {
     required this.id,
     required this.phoneNumber,
     this.userId,
-    this.serialNumber,
+    this.productCode,
     required this.role,
   });
 
   factory DeviceMemberModel.fromJson(Map<String, dynamic> json) => DeviceMemberModel(
-        id:           json['id']           as String,
-        phoneNumber:  json['phoneNumber']  as String,
-        userId:       json['userId']       as String?,
-        serialNumber: json['serialNumber'] as String?,
-        role:         json['role']         as String,
+        id:          json['id']          as String,
+        phoneNumber: json['phoneNumber'] as String,
+        userId:      json['userId']      as String?,
+        productCode: json['productCode'] as String?,
+        role:        json['role']        as String,
       );
 }
 

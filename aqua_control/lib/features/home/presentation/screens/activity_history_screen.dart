@@ -6,8 +6,8 @@ import '../../data/models/module_action_log_model.dart';
 import '../../data/repositories/motor_repository.dart';
 
 class ActivityHistoryScreen extends StatefulWidget {
-  final String serialNumber;
-  const ActivityHistoryScreen({super.key, required this.serialNumber});
+  final String productCode;
+  const ActivityHistoryScreen({super.key, required this.productCode});
 
   @override
   State<ActivityHistoryScreen> createState() => _ActivityHistoryScreenState();
@@ -31,7 +31,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       _error = '';
     });
     try {
-      final logs = await _repo.fetchActionLogs(widget.serialNumber);
+      final logs = await _repo.fetchActionLogs(widget.productCode);
       if (mounted)
         setState(() {
           _logs = logs;

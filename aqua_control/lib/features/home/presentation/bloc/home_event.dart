@@ -9,17 +9,17 @@ abstract class HomeEvent extends Equatable {
 
 class LoadHomeData extends HomeEvent {
   final String userName;
-  final String serialNumber;
+  final String productCode;
   final String societyCode;
   final String commandBy;
   const LoadHomeData({
     this.userName = '',
-    this.serialNumber = '',
+    this.productCode = '',
     this.societyCode = '',
     this.commandBy = '',
   });
   @override
-  List<Object?> get props => [userName, serialNumber, societyCode, commandBy];
+  List<Object?> get props => [userName, productCode, societyCode, commandBy];
 }
 
 class RefreshStatus extends HomeEvent {

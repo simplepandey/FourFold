@@ -99,6 +99,7 @@ class PumpStatusModel extends Equatable {
         mode,
         overheadPercent,
         undergroundPercent,
+        isOnline,
         ocBreached,
         ucBreached,
       ];

@@ -15,12 +15,12 @@ export class CreateMotorCommandDto {
   motorId: string;
 
   @ApiProperty({
-    example: 'SN-2024-001',
-    description: 'Module serial number — used to key module_status / module_action_logs',
+    example: 'FF00100',
+    description: 'Module product code — used to key module_status / module_action_logs',
   })
   @IsString()
   @IsNotEmpty()
-  serialNumber: string;
+  productCode: string;
 
   @ApiProperty({
     enum: ['TURN_ON', 'TURN_OFF', 'SET_OC', 'SET_UC'],
