@@ -59,6 +59,16 @@ export class TelemetryService implements OnModuleInit {
       motorRunning: payload.motor,
     });
 
+    // ocBreached/ucBreached are only ever set true by processAlert() below —
+    // nothing ever cleared them, so once tripped they stayed true forever,
+    // showing a permanent red "overcurrent detected" banner in the app even
+    // after the motor was cycled back on and running normally again. Clear
+    // them here once telemetry confirms the motor is actually running
+    // (not just off with a near-zero reading, which isn't a real "it's
+    // fine now" signal) and its current is back within the OC/UC band.
+    const clearOc = payload.motor && payload.i <= payload.oc;
+    const clearUc = payload.motor && payload.i >= payload.uc;
+
     await this.moduleStatusService.upsert({
       productCode,
       voltage: payload.v,
@@ -68,6 +78,8 @@ export class TelemetryService implements OnModuleInit {
       ...(payload.oh !== undefined && { overheadTankLevel: Math.round(payload.oh) }),
       ...(payload.gt !== undefined && { undergroundTankLevel: Math.round(payload.gt) }),
       motorStatus: payload.motor ? 'ON' : 'OFF',
+      ...(clearOc && { ocBreached: false }),
+      ...(clearUc && { ucBreached: false }),
       updatedBy: 'device',
     });
 

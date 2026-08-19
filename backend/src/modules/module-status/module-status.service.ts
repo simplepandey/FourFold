@@ -26,6 +26,7 @@ interface HeartbeatPayload {
   i: number; // current (A)
   oc: number; // over current (A)
   uc: number; // under current (A)
+  motor?: boolean; // motor relay state - optional, older firmware may not send it
 }
 
 @Injectable()
@@ -176,12 +177,26 @@ export class ModuleStatusService implements OnModuleInit {
     const { productCode } = entry;
 
     try {
+      // Same reasoning as TelemetryService.processTelemetry(): ocBreached/
+      // ucBreached are only ever set true (by processAlert), never cleared
+      // — a manual refresh (GET /module-status, which lands here via
+      // requestHeartbeatAndWait) would otherwise keep showing a stale
+      // breach forever even once current is genuinely back in range. Only
+      // clear while the motor is confirmed running - a near-zero reading
+      // because the relay is still latched off after a real fault must not
+      // look like "resolved".
+      const clearOc = payload.motor === true && payload.i <= payload.oc;
+      const clearUc = payload.motor === true && payload.i >= payload.uc;
+
       await this.upsert({
         productCode,
         voltage: payload.v,
         current: payload.i,
         overcurrent: payload.oc,
         undercurrent: payload.uc,
+        ...(payload.motor !== undefined && { motorStatus: payload.motor ? 'ON' : 'OFF' }),
+        ...(clearOc && { ocBreached: false }),
+        ...(clearUc && { ucBreached: false }),
         isOnline: true,
         updatedBy: 'device',
       });
