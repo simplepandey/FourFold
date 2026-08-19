@@ -1048,7 +1048,7 @@
   // topics into netData on success. Idempotent - safe to call on every boot.
   bool registerDeviceWithBackend() {
     String url = String(BACKEND_BASE_URL) + "/api/v1/device/register/" +
-                 getDeviceSerial() + "?type=esp32";
+                 getDeviceSerial() + "?type=aqua_control";
 
     WiFiClientSecure client;
     client.setInsecure(); // no CA pinned - see esp32/README.md security note
