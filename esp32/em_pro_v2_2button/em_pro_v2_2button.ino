@@ -968,7 +968,7 @@
     memset(blePassBuf, 0, sizeof(blePassBuf));
 
     String serial = getDeviceSerial();
-    String bleName = "AquaControl-" + serial.substring(serial.length() - 6);
+    String bleName = "fourfold-bluetooth";
     BLEDevice::init(bleName.c_str());
 
     BLEServer* server = BLEDevice::createServer();
