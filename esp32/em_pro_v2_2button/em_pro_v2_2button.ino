@@ -1000,6 +1000,12 @@
     while ((long)(deadline - millis()) > 0) {
       esp_task_wdt_reset();
 
+      // Nothing else touches the display yet at this point in boot (loop()
+      // hasn't started, so turn_off()'s normal "OFF" screen has never
+      // painted) - blink it here so there's some visible sign BLE is on
+      // and waiting, instead of the display just sitting blank.
+      blink_print(20, 21, 22, 22);
+
       if (bleClientConnected) everConnected = true;
       if (everConnected && !bleClientConnected) break; // phone disconnected without a successful attempt
 
