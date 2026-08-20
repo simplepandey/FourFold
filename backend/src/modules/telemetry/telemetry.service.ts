@@ -12,6 +12,7 @@ interface TelemetryPayload {
   oh?: number; // overhead tank (%)
   motor: boolean; // motor relay state
   sn: number; // ESP32 serial number
+  mode?: 'auto' | 'manual'; // only sent by sensor_based_auto_controlled devices
 }
 
 @Injectable()
@@ -79,6 +80,7 @@ export class TelemetryService implements OnModuleInit {
       ...(payload.oh !== undefined && { overheadTankLevel: Math.round(payload.oh) }),
       ...(payload.gt !== undefined && { undergroundTankLevel: Math.round(payload.gt) }),
       motorStatus: payload.motor ? 'ON' : 'OFF',
+      ...(payload.mode !== undefined && { mode: payload.mode }),
       ...(backInRange && { ocBreached: false, ucBreached: false }),
       updatedBy: 'device',
     });

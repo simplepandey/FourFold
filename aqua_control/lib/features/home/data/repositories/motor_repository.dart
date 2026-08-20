@@ -41,9 +41,11 @@ class MotorRepository {
     ));
   }
 
-  /// POST /motor/command  { societyCode, motorId, productCode, command, value?, commandBy }
-  /// [command] one of TURN_ON | TURN_OFF | SET_OC | SET_UC. [value] is the threshold
-  /// in amps, required for SET_OC / SET_UC.
+  /// POST /motor/command  { societyCode, motorId, productCode, command, value?, mode?, commandBy }
+  /// [command] one of TURN_ON | TURN_OFF | SET_OC | SET_UC | SET_MODE. [value] is the
+  /// threshold in amps, required for SET_OC / SET_UC. [mode] is 'auto' | 'manual',
+  /// required for SET_MODE — the backend rejects it with an error message if the
+  /// module's device type doesn't support auto mode.
   Future<void> sendCommand({
     required String societyCode,
     required String motorId,
@@ -51,6 +53,7 @@ class MotorRepository {
     required String command,
     required String commandBy,
     double? value,
+    String? mode,
   }) async {
     if (AppConfig.useMock) {
       await Future.delayed(const Duration(milliseconds: 400));
@@ -64,6 +67,7 @@ class MotorRepository {
         'productCode': productCode,
         'command': command,
         if (value != null) 'value': value,
+        if (mode != null) 'mode': mode,
         'commandBy': commandBy,
       },
     );

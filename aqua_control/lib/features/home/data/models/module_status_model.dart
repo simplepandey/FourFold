@@ -11,6 +11,7 @@ class ModuleStatusModel extends Equatable {
   final int overheadTankLevel;
   final int undergroundTankLevel;
   final String motorStatus; // 'ON' | 'OFF'
+  final String mode; // 'auto' | 'manual' — only meaningful for sensor_based_auto_controlled modules
   final bool ocBreached;
   final bool ucBreached;
   final bool isOnline;
@@ -26,6 +27,7 @@ class ModuleStatusModel extends Equatable {
     required this.overheadTankLevel,
     required this.undergroundTankLevel,
     required this.motorStatus,
+    this.mode = 'manual',
     required this.ocBreached,
     required this.ucBreached,
     this.isOnline = false,
@@ -46,6 +48,7 @@ class ModuleStatusModel extends Equatable {
         undergroundTankLevel:
             (json['undergroundTankLevel'] as num?)?.toInt() ?? 0,
         motorStatus: (json['motorStatus'] as String?) ?? 'OFF',
+        mode: (json['mode'] as String?) ?? 'manual',
         ocBreached: (json['ocBreached'] as bool?) ?? false,
         ucBreached: (json['ucBreached'] as bool?) ?? false,
         isOnline: (json['isOnline'] as bool?) ?? false,
@@ -60,7 +63,7 @@ class ModuleStatusModel extends Equatable {
         pumpId: productCode,
         pumpName: pumpName,
         motorStatus: isOn ? MotorStatus.on : MotorStatus.off,
-        mode: MotorMode.manual,
+        mode: mode == 'auto' ? MotorMode.auto : MotorMode.manual,
         overheadPercent: overheadTankLevel.clamp(0, 100) / 100,
         undergroundPercent: undergroundTankLevel.clamp(0, 100) / 100,
         voltage: voltage,

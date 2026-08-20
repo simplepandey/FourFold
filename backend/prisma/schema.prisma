@@ -197,6 +197,11 @@ model ModuleStatus {
   overheadTankLevel    Int      @default(0)
   undergroundTankLevel Int      @default(0)
   motorStatus          String   @default("OFF")
+  // 'auto' | 'manual' - only meaningful for esp_registrations.type ==
+  // 'sensor_based_auto_controlled' devices (see SET_MODE in
+  // motor-command.service.ts). Devices of type 'manual_controlled' never
+  // report this, so it just stays at the default forever for them.
+  mode                 String   @default("manual")
   ocBreached           Boolean  @default(false)
   ucBreached           Boolean  @default(false)
   isOnline             Boolean  @default(false)

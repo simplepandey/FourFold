@@ -140,7 +140,44 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
       ChangeMotorMode event, Emitter<HomeState> emit) async {
     if (state is! HomeLoaded) return;
     final current = state as HomeLoaded;
-    emit(current.copyWith(status: current.status.copyWith(mode: event.mode)));
+
+    // 'schedule' has no backend support yet - stays a purely local UI
+    // toggle, same as before this method sent anything over the network.
+    if (event.mode == MotorMode.schedule) {
+      emit(current.copyWith(status: current.status.copyWith(mode: event.mode)));
+      return;
+    }
+
+    if (current.commandPending) return;
+
+    // Optimistic update - reverted below if the backend rejects it (e.g.
+    // "your module doesn't support auto mode" for a manual_controlled
+    // device), same pattern as _onToggleMotor/_onSetThresholds.
+    final optimisticStatus = current.status.copyWith(mode: event.mode);
+    emit(current.copyWith(
+        status: optimisticStatus, commandPending: true, clearError: true));
+
+    try {
+      await _motorRepo.sendCommand(
+        societyCode: _societyCode,
+        motorId: _productCode,
+        productCode: _productCode,
+        command: 'SET_MODE',
+        mode: event.mode == MotorMode.auto ? 'auto' : 'manual',
+        commandBy: _commandBy,
+      );
+      if (state is HomeLoaded) {
+        emit((state as HomeLoaded).copyWith(commandPending: false));
+      }
+    } catch (e) {
+      if (state is HomeLoaded) {
+        emit((state as HomeLoaded).copyWith(
+          status: current.status,
+          commandPending: false,
+          motorError: e.toString().replaceAll('Exception: ', ''),
+        ));
+      }
+    }
   }
 
   Future<void> _onSetThresholds(

@@ -14,6 +14,7 @@ export interface ModuleStatusUpsertInput {
   overheadTankLevel?: number;
   undergroundTankLevel?: number;
   motorStatus?: string;
+  mode?: string; // 'auto' | 'manual' - only meaningful for sensor_based_auto_controlled devices
   ocBreached?: boolean;
   ucBreached?: boolean;
   isOnline?: boolean;
@@ -64,6 +65,7 @@ export class ModuleStatusService implements OnModuleInit {
         overheadTankLevel: fields.overheadTankLevel ?? 0,
         undergroundTankLevel: fields.undergroundTankLevel ?? 0,
         motorStatus: fields.motorStatus ?? 'OFF',
+        mode: fields.mode ?? 'manual',
         ocBreached: fields.ocBreached ?? false,
         ucBreached: fields.ucBreached ?? false,
         isOnline: fields.isOnline ?? false,
@@ -81,6 +83,7 @@ export class ModuleStatusService implements OnModuleInit {
           undergroundTankLevel: fields.undergroundTankLevel,
         }),
         ...(fields.motorStatus !== undefined && { motorStatus: fields.motorStatus }),
+        ...(fields.mode !== undefined && { mode: fields.mode }),
         ...(fields.ocBreached !== undefined && { ocBreached: fields.ocBreached }),
         ...(fields.ucBreached !== undefined && { ucBreached: fields.ucBreached }),
         ...(fields.isOnline !== undefined && { isOnline: fields.isOnline }),
